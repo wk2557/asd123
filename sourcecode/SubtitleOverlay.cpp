@@ -1,6 +1,7 @@
 #include "SubtitleOverlay.h"
 #include <Windows.h>
 
+
 bool LPRCopySubImageToLarge( const LPRImage* pImSub, LPRImage* pImLarge, RECT rect )
 {
 	if (!pImLarge || !pImSub)
