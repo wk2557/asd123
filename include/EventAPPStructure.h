@@ -48,6 +48,7 @@ struct EventAPPResult
 {
 	int mID;															// 物体的ID
 	int mNumOfImage;													// 图像的个数
+	wchar_t mPlate[LPR_PLATE_STR_LEN];
 	VSDBreakRule mBreakRule;											// ID物体违反的规则
 	LPRImage* mImage[MAX_FRAM_AHEAD + MAX_FRAM_BHEIND];					// 物体的图片序列
 };
