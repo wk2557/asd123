@@ -49,8 +49,23 @@ public:
 	// 输出参数 opResult: 输出到当前图片为止，刚刚离开跟踪区域的车辆的图片序列以及是否违章等信息，见EventMultiAPPResult的表述
 	APPRESULT ProcessFram(LPRImage* ipImage, const VSDObjectMulti* ipObjectMulti, int iLightStatus[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult); 
 
-	// 
-	APPRESULT AddSubTitle(LPRImage* ipImage, const std::string& irString, LPRImage** opImage);
+	// 给图片加指定的字幕
+	// 输入参数 ipImage: 需要叠加字幕的源图片
+	// 输入参数 ipString: 需要叠加的字幕
+	// 输出参数 oppImage: 叠加好字幕的图片
+	APPRESULT AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, LPRImage** oppImage);
+
+	// 把指定数目个图片合成一张图片
+	// 输入参数 ipImage: 指向输入图片的数组
+	// 输入参数 iNumOfImages: 输入图片的个数
+	// 输出参数 oppImage; 指向合成的图片指针的指针
+	APPRESULT SynthesisImages(LPRImage* ipImage, int iNumOfImages, LPRImage** oppImage);
+
+	// 把指定数目的图片合成视频
+	// 输入参数 ipImage: 指向输入图片的数组
+	// 输入参数 iNumOfImage: 输入图片的数目
+	// 输出参数 orMeida: 输出的视频
+	APPRESULT Convert2Media(LPRImage* ipImage, int iNumOfImages, EventMedia& orMedia);
 
 private:
 	// We don't want user to copy this object

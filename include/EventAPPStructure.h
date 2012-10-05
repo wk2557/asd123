@@ -31,16 +31,13 @@ struct EventRecordParam
 	int mBitFrequent;				   // 视频比特率
 };
 
-<<<<<<< Updated upstream
 struct EventMedia
 {
 	uint8_t *mBufferPtr;
 	int mBufferSize;
 };
 
-=======
 // 合成图片的字幕的字体信息
->>>>>>> Stashed changes
 struct EventFont 
 {
 	int mFontSize;					   // 字体大小
