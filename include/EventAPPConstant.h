@@ -52,5 +52,6 @@ typedef int APPRESULT;
 #define DEFAULT_PLATE_MIN_WIDTH			70		// 车牌的最小宽度，供车牌识别用
 #define DEFAULT_PLATE_MAX_WIDTH			300		// 车牌的最大宽度，供车牌识别用
 #define DEFAULT_NUMBER_PLATE			1		// 车牌的数目，供车牌识别用
+#define MAX_CHARACTOR_NUM				100     // 字幕中最大的字符数目
 
 #endif

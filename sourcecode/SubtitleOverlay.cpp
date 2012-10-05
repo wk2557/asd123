@@ -110,7 +110,7 @@ SubtitleOverlay& SubtitleOverlay::getInstance()
 	return so;
 }
 
-void SubtitleOverlay::initialize(const string &str, const EventFont &fontParam)
+void SubtitleOverlay::initialize(const wchar_t *wstr, const EventFont &fontParam)
 {
 	mFontParam = fontParam;
 	//////////////////////////////////////////////////////////////////////////
@@ -132,8 +132,7 @@ void SubtitleOverlay::initialize(const string &str, const EventFont &fontParam)
 		return;
 	}
 	//////////////////////////////////////////////////////////////////////////
-	wchar_t *wstr = new wchar_t[str.size()];	// 宽字符肯定不会超过str.size()
-	int wstrSize = str2wstr(wstr, str.c_str(), str.size());
+	int wstrSize = wcslen(wstr);
 	if (wstrSize < 0)
 	{
 		printf("字幕叠加模块初始化失败.\n");
@@ -179,16 +178,15 @@ void SubtitleOverlay::initialize(const string &str, const EventFont &fontParam)
 	DeleteObject((HGDIOBJ)hfont);
 	DeleteDC(memDC);
 	//////////////////////////////////////////////////////////////////////////
-	delete []wstr;
 }
 
-LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &subtitle, const EventFont &fontParam)
+LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const wchar_t* subtitle, const EventFont &fontParam)
 {
-	if (subtitle.size() > 0)
+	if (wcslen(subtitle) > 0)
 	{
-		wchar_t *wstr = new wchar_t[subtitle.size()];
-		int wstrSize = str2wstr(wstr, subtitle.c_str(), subtitle.size());
-		LPRImage *fontImg = characterImage(wstr[0]);
+		//wchar_t *wstr = new wchar_t[subtitle.size()];
+		int wstrSize = wcslen(subtitle);
+		LPRImage *fontImg = characterImage(subtitle[0]);
 		int imgWidth = fontImg->width;
 		int imgHeight = fontImg->height;
 		int imgDepth = fontImg->depth;
@@ -206,7 +204,7 @@ LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &su
 					r.top  = 0; 
 					r.right = i * imgWidth + imgWidth;
 					r.bottom = imgHeight;
-					fontImg = characterImage(wstr[i]);
+					fontImg = characterImage(subtitle[i]);
 					LPRCopySubImageToLarge(fontImg, subtitleImg, r);
 				}
 			}
@@ -221,7 +219,7 @@ LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &su
 					r.top  = i * imgHeight; 
 					r.right = imgWidth;
 					r.bottom = i * imgHeight + imgHeight;
-					fontImg = characterImage(wstr[i]);
+					fontImg = characterImage(subtitle[i]);
 					LPRCopySubImageToLarge(fontImg, subtitleImg, r);
 				}
 			}
@@ -242,7 +240,6 @@ LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &su
 		//////////////////////////////////////////////////////////////////////////
 		LPRReleaseImage(subtitleImg);
 		//LPRReleaseImage(pImBackground);
-		delete []wstr;
 		return pImBackground;
 	}
 	return NULL;

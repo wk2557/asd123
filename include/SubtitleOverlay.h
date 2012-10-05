@@ -24,7 +24,7 @@ public:
 	 * param str - 字库
 	 * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
 	 */
-	void initialize(const string &str, const EventFont &fontParam);
+	void initialize(const wchar_t *wstr, const EventFont &fontParam);
 	/**
 	 * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
 	 *
@@ -34,7 +34,7 @@ public:
 	 *
 	 * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
 	 */
-	LPRImage* overlaySubtitle(LPRImage *pRawImage, const string &subtitle, const EventFont &fontParam);
+	LPRImage* overlaySubtitle(LPRImage *pRawImage, const wchar_t* subtitle, const EventFont &fontParam);
 private:
 	SubtitleOverlay(void) {}
 	SubtitleOverlay(const SubtitleOverlay &other) {}

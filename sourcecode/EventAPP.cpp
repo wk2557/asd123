@@ -15,6 +15,7 @@
 #include <sstream>
 #include <LPRVideo.h>
 #include <LPR.h>
+#include "ImageSynthesis.h"
 
 
 
@@ -29,20 +30,16 @@ using namespace std;
 #endif
 
 #ifdef __DEBUG
-
 #include <iostream>
 #include <string>
 #include <vector>
 #include <ctime>
 #include <algorithm>
-
 #define TRACE(string) std::cout << string << std::endl
-
 ofstream lNoBreakRuleLog("NoBreakRule.txt");
 wofstream lBreakRuleHistoryLog("BreakRuleHistory.txt");
 ofstream lBreakOutputLog("BreakRuleOutput.txt");
 std::wstring lCurrentPicName;
-
 #endif
 
 
@@ -208,7 +205,7 @@ typedef std::list<EventAPPResult> ResultList;
 
 EventAPP::EventAPP()
 {
-	mObject = new int*[14];
+	mObject = new int*[15];
 }
 
 APPRESULT EventAPP::Init(const EventAPPParam& irParam)
@@ -228,15 +225,16 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	*(pValue + 4) = (int*)new VirtualLoopImagePool;							// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
 	*(pValue + 5) = (int*)new StatusMap;									// EventAPP的第六个成员保存从跟踪开始到结束的历史breakrule状态的叠加值
 	*(pValue + 6) = (int*)new StatusMap;									// EventAPP的第七个成员保存每个物体的某个breakrule是否已经录制过视频，防止录制相同物体的相同违章
-	*(pValue + 7) = (int*)new MediaConverter((EventAPPViedoFormat)irParam.mRecordParam.mViedoFormat);  // EventAPP的第八个成员保存MediaConvertoer，用了录制视频
+	*(pValue + 7) = (int*)new MediaConverter((EventAPPViedoFormat)irParam.mRecordParam.mViedoFormat, irParam.mRecordParam.mBitFrequent);  // EventAPP的第八个成员保存MediaConvertoer，用了录制视频
 	SubtitleOverlay* pSubTitleOverlay = &SubtitleOverlay::getInstance();
-	pSubTitleOverlay->initialize("0123456789km", irParam.mFont);
+	pSubTitleOverlay->initialize(irParam.mFont.mCharactors, irParam.mFont);
 	*(pValue + 8) = (int*)pSubTitleOverlay;					                // EventAPP的第九个成员用来叠加字母
 	*(pValue + 9) = NULL;													// EventAPP的第十个成员用了识别车牌
 	*(pValue + 10) = (int*)new PlateMap;									// EventAPP的第十一个成员用了保存每个车的车牌号
 	*(pValue + 11) = (int*)new VirtualLoopImagePool;						// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
 	*(pValue + 12) = NULL;													// EventAPP的第六个成员保存图片宽度与相对宽度的比值
 	*(pValue + 13) = NULL;													// EventAPP的第七个成员保存图片高度与相对高度的比值
+	*(pValue + 14) = (int*)new ImageSynthesis;
 	return APP_OK;
 }
 
@@ -1076,6 +1074,8 @@ EventAPP::~EventAPP()
 	VirtualLoopImagePool* pVirtualLoopLeaveImage = (VirtualLoopImagePool*)(*(pValue + 11));
 	int* pImageWidth = (int*)(*(pValue + 12));
 	int* pImageHeight = (int*)(*(pValue + 13));
+	ImageSynthesis* pImageSynthesis = (ImageSynthesis*)(*(pValue + 14));
+	
 
 	delete pAPPParam;
 
@@ -1115,6 +1115,61 @@ EventAPP::~EventAPP()
 
 	delete pImageHeight;
 	delete pImageWidth;
+
+	delete pImageWidth;
+}
+
+APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, LPRImage** oppImage)
+{
+	if (ipImage == NULL || ipString == NULL || oppImage == NULL)
+	{
+#ifdef __DEBUG
+		TRACE("EventAPP::AddSubTitle input null pointer");
+#endif
+		return APP_INPUT_NULL_POINTER;
+	}
+	int** pValue = (int**)mObject;
+	EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
+	SubtitleOverlay* pSubtitleOverlay;
+	*oppImage = pSubtitleOverlay->overlaySubtitle(ipImage, ipString, pEventParam->mFont);
+	if(*oppImage == NULL)
+		return APP_FAIL;
+	return APP_OK;
+}
+
+APPRESULT EventAPP::SynthesisImages(LPRImage** ipImage, int iNumOfImages, LPRImage** oppImage)
+{
+	if (ipImage == NULL || oppImage == NULL)
+	{
+#ifdef __DEBUG
+		TRACE("EventAPP::SynthesisImages input null pointer");
+#endif
+		return APP_INPUT_NULL_POINTER;
+	}
+
+	int** pValue = (int**)mObject;
+	EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
+	ImageSynthesis* pImageSynthesis = (ImageSynthesis*)(*(pValue + 14));
+	*oppImage = pImageSynthesis->synthesis(ipImage, pEventParam->mImageSynthesis);
+	if (*oppImage == NULL)
+		return APP_FAIL;
+	return APP_OK;
+}
+
+APPRESULT EventAPP::Convert2Media(LPRImage** ipImage, int iNumOfImages, EventMedia& orMedia)
+{
+	if (ipImage == NULL)
+	{
+#ifdef __DEBUG 
+		TRACE("EventAPP::Convert2Media input null pointer");
+#endif
+	}
+	int** pValue = (int**)mObject;
+	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 7));
+	bool ret = pMediaConverter->imgs2media(ipImage, iNumOfImages, orMedia);
+	if(!ret)
+		return APP_FAIL;
+	return APP_OK;
 }
 
  void __stdcall FreeAPPResult(EventAPPResult* ipAPPResult)
@@ -1155,6 +1210,15 @@ void __stdcall MyStrim(std::string& toTrimed)
 	while( end > start && (toTrimed.at(end) == ' '|| toTrimed.at(end) == '\t'))
 		--end;
 	toTrimed = toTrimed.substr(start, end - start + 1);
+}
+
+static int str2wstr(wchar_t *dst, const char *src, int srcSize)
+{
+	int cchWideChar = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)src, srcSize, 0, 0);
+	if(cchWideChar < 0) return false;
+	MultiByteToWideChar(CP_ACP, 0,(LPCSTR)src, srcSize, dst, cchWideChar);
+	dst[cchWideChar] = L'\0';
+	return cchWideChar;
 }
 
 typedef std::map<std::string, std::string> KeyValue;
@@ -1257,6 +1321,27 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 			return APP_VSD_PARAM_FAULT;
 		}
 		ipEventParam->mVSDParam = lVSDEventParam;
+	}
+
+	it = keyValue.find("Charactors");
+	if(it == keyValue.end())
+	{
+#ifdef __DEBUG
+		TRACE("EventAPP_LoadParam 输入参数文件格式有误");
+#endif
+		return APP_CONFIG_PARAM_FAULT;
+	}
+	else
+	{
+		if(it->second.size() > MAX_CHARACTOR_NUM)
+		{
+#ifdef __DEBUG
+			TRACE("EventAPP_LoadParam 输入参数文件格式有误");
+#endif
+			return APP_CONFIG_PARAM_FAULT;
+		}
+		str2wstr(ipEventParam->mFont.mCharactors, it->second.c_str(), it->second.size());
+		//ipEventParam->mFont.mCharactors[it->second.size() + 1] = L'\0';
 	}
 	
 	// 初始化左转线p1点的x坐标
@@ -1451,12 +1536,7 @@ static bool CmpFileName(const string& a, const string& b)
 	return a.length() == b.length() ? a < b : a.length() < b.length();
 }
 
-static int str2wstr(wchar_t *dst, const char *src, int srcSize)
-{
-	int cchWideChar = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)src, srcSize, 0, 0);
-	if(cchWideChar < 0) return false;
-	return MultiByteToWideChar(CP_ACP, 0,(LPCSTR)src, srcSize, dst, cchWideChar);
-}
+
 
 void EmumAllJPGFileInFolder(std::wstring folder, std::vector<std::wstring>& files)
 {

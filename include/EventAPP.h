@@ -59,13 +59,13 @@ public:
 	// 输入参数 ipImage: 指向输入图片的数组
 	// 输入参数 iNumOfImages: 输入图片的个数
 	// 输出参数 oppImage; 指向合成的图片指针的指针
-	APPRESULT SynthesisImages(LPRImage* ipImage, int iNumOfImages, LPRImage** oppImage);
+	APPRESULT SynthesisImages(LPRImage** ipImage, int iNumOfImages, LPRImage** oppImage);
 
 	// 把指定数目的图片合成视频
 	// 输入参数 ipImage: 指向输入图片的数组
 	// 输入参数 iNumOfImage: 输入图片的数目
 	// 输出参数 orMeida: 输出的视频
-	APPRESULT Convert2Media(LPRImage* ipImage, int iNumOfImages, EventMedia& orMedia);
+	APPRESULT Convert2Media(LPRImage** ipImage, int iNumOfImages, EventMedia& orMedia);
 
 private:
 	// We don't want user to copy this object

@@ -31,15 +31,17 @@ struct EventRecordParam
 	int mBitFrequent;				   // 视频比特率
 };
 
+// 返回的视频结构
 struct EventMedia
 {
-	uint8_t *mBufferPtr;
-	int mBufferSize;
+	uint8_t *mBufferPtr;			  // 指向视频的buffer
+	int mBufferSize;				  // 视频buffer的大小
 };
 
 // 合成图片的字幕的字体信息
 struct EventFont 
 {
+	wchar_t mCharactors[MAX_CHARACTOR_NUM]; // 字幕的字符集
 	int mFontSize;					   // 字体大小
 	int mFontFamily;				   // 字体格式
 	COLORREF mFontColor;			   // 字体颜色

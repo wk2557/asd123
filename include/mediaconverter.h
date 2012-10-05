@@ -1,8 +1,6 @@
 #ifndef MEDIACONVERTER_H
 #define MEDIACONVERTER_H
 
-#define __STDC_CONSTANT_MACROS
-
 #include "EventAPPConstant.h"
 #include "EventAPPStructure.h"
 #include <LPRVideo.h>
