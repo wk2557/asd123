@@ -94,6 +94,16 @@ LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynt
 		printf("Unsupported image orientation.\n");
 		return NULL;
 	}
+	// 如果生成了大图，并且需要进行缩放
+	if (NULL != pLargeImg && synthesisParam.mZoonRatio != 1.0)
+	{
+		int nTargetWidth = (int)(pLargeImg->width * synthesisParam.mZoonRatio + 0.5f);
+		int nTargetHeight = (int)(pLargeImg->height * synthesisParam.mZoonRatio + 0.5f);
+		LPRImage* pImTextResized = LPRCreateImage(nTargetWidth, nTargetHeight, pLargeImg->depth, pLargeImg->nChannels);
+		LPRResizeImage(pLargeImg, pImTextResized);
+		LPRReleaseImage(pImTextResized);
+		pLargeImg = pImTextResized;
+	}
 	// 释放小图
 	for (int i = 0; i < synthesisParam.mNumberofImage; ++ i)
 		LPRReleaseImage(pImages[i]);
