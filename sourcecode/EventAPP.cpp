@@ -211,7 +211,7 @@ typedef std::list<EventAPPResult> ResultList;
 
 EventAPP::EventAPP()
 {
-	mObject = new int*[11];
+	mObject = new int*[12];
 }
 
 APPRESULT EventAPP::Init(const EventAPPParam& irParam)
@@ -237,6 +237,7 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	*(pValue + 8) = (int*)pSubTitleOverlay;					                // EventAPP的第九个成员用来叠加字母
 	*(pValue + 9) = NULL;													// EventAPP的第十个成员用了识别车牌
 	*(pValue + 10) = (int*)new PlateMap;									// EventAPP的第十一个成员用了保存每个车的车牌号
+	*(pValue + 11) = (int*)new VirtualLoopImagePool;						// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
 	return APP_OK;
 }
 
@@ -280,6 +281,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	SubtitleOverlay* pSubtitleOverlay = (SubtitleOverlay*)(*(pValue + 8));
 	LPR* pLPR = (LPR*)(*(pValue + 9));
 	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 10));
+	VirtualLoopImagePool* pVirtualLoopLeavImage = (VirtualLoopImagePool*)(*(pValue + 11));
 
 	// 得到VSDEventParam的参数
 	VSDEventParam lVSDParam = pAPPParam->mVSDParam;
