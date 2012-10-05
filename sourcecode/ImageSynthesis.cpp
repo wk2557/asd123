@@ -150,7 +150,7 @@ LPRImage* ImageSynthesis::genFocusImage(const LPRImage *pSrcImage, const VSDRect
 			startCopyY = 0;
 			pResizedImage = LPRCreateImage(resizedImageWidth, resizedImageHeight, depth, nChannels);
 			LPRResizeImage(pFocusImage, pResizedImage);
-			LPRSaveImage(pResizedImage, "d:\\resized.jpg");
+			//LPRSaveImage(pResizedImage, "d:\\resized.jpg");
 		}
 		else if (srcFocusDelta < 0)	// 原图像的宽高比更小，则按照宽来放大图像
 		{
