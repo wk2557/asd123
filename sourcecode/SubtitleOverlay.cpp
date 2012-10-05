@@ -235,7 +235,7 @@ LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &su
 		// 从JPG码流中解压出BGR24
 		LPRImage *pImBackground = NULL;
 		LPRDecodeImage(&pImBackground, pRawImage->pData, pRawImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
-		LPRReleaseImage(pRawImage);	// 释放JPG码流
+		//LPRReleaseImage(pRawImage);	// 释放JPG码流
 		//////////////////////////////////////////////////////////////////////////
 		LPROverlay(subtitleImg, pImBackground, fontParam.mFontX, fontParam.mFontY);
 		//LPRSaveImage(pImBackground, saveAsPath.c_str());

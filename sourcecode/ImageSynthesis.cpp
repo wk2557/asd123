@@ -13,7 +13,7 @@ LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynt
 		LPRImage *pImage = NULL;
 		LPRDecodeImage(&pImage, pRawImages[i]->pData, pRawImages[i]->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
 		pImages[i] = pImage;
-		LPRReleaseImage(pRawImages[i]);
+		//LPRReleaseImage(pRawImages[i]);
 	}
 	
 	int littleImgWidth = pImages[0]->width;
