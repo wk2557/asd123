@@ -516,7 +516,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	//ResultList lResultList;
 	int lResultCount = 0;
 	// 对比新的PoolData和原来队尾的数据，如果发现原来队尾巴的物理在新的PoolData里消失，则说明有物体离开跟踪区域，这是我们根据其历史status来判断是该物体是否有违章，
-	// 如果没有违章，则输出一张其停车线附近的图片。同时，pVirtualImagePool和pPlateMap里对应的数据也不需要，需要删除，来释放内存
+	// 如果没有违章，则输出一张其停车线附近的图片
 	if (!pPool->empty())
 	{
 		std::map<int, int> lastObject = pPool->back().mBreakRules;
@@ -540,6 +540,13 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 						lpResult.mID = it->first;
 						lpResult.mImage[0] = lpImage;
 						lpResult.mNumOfImage = 1;
+						if(itPlate != pPlateMap->end())
+						{
+							for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+							{
+								lpResult.mPlate[i] = itPlate->second[i];
+							}
+						}
 						//lResultList.push_back(lpResult);
 						opResult->mppAPPResult[lResultCount++] = lpResult;
 						opResult->mNumOfResult = lResultCount;
@@ -550,11 +557,13 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				}
 				if(itStatus != pStatusMap->end())
 					pStatusMap->erase(itStatus);
+				/*
 				if(itPlate != pPlateMap->end())
 				{
 					delete[] itPlate->second;
 					pPlateMap->erase(itPlate);
 				}
+				*/
 			}
 		}
 	}
@@ -588,6 +597,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_TURN_LEFT;
+					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+					if(itPlate != pPlateMap->end())
+					{
+						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+						{
+							lpAPPResult.mPlate[i] = itPlate->second[i];
+						}
+					}
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -629,6 +646,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_TURN_RIGHT;
+					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+					if(itPlate != pPlateMap->end())
+					{
+						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+						{
+							lpAPPResult.mPlate[i] = itPlate->second[i];
+						}
+					}
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -670,6 +695,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_STRAIGHT_THROUGH;
+					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+					if(itPlate != pPlateMap->end())
+					{
+						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+						{
+							lpAPPResult.mPlate[i] = itPlate->second[i];
+						}
+					}
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -711,6 +744,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					EventAPPResult lpAPPResult; 
 					lpAPPResult.mID = itObject->first; 
 					lpAPPResult.mBreakRule = VSD_BR_CROSS_LANE;
+					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+					if(itPlate != pPlateMap->end())
+					{
+						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+						{
+							lpAPPResult.mPlate[i] = itPlate->second[i];
+						}
+					}
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -752,6 +793,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_REVERSE;
+					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+					if(itPlate != pPlateMap->end())
+					{
+						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+						{
+							lpAPPResult.mPlate[i] = itPlate->second[i];
+						}
+					}
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -793,6 +842,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_RED_LIGHT;
+					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+					if(itPlate != pPlateMap->end())
+					{
+						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+						{
+							lpAPPResult.mPlate[i] = itPlate->second[i];
+						}
+					}
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -834,6 +891,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_STOP;
+					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+					if(itPlate != pPlateMap->end())
+					{
+						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+						{
+							lpAPPResult.mPlate[i] = itPlate->second[i];
+						}
+					}
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -876,13 +941,21 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 			{
 				StatusMap::iterator itStatusMap = pRemoveStatusMap->find(itObject->first);
 				if(itStatusMap != pRemoveStatusMap->end())
-					pRemoveStatusMap->erase(itObject->first);
+					pRemoveStatusMap->erase(itStatusMap);
+				PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
+				if(itPlate != pPlateMap->end())
+				{
+					delete[] itPlate->second;
+					pPlateMap->erase(itPlate);
+				}
+
 				VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
 				if (itVirtualLoopImage != pVirtualLoopImage->end())
 				{
 					LPRReleaseImage(itVirtualLoopImage->second);
 					pVirtualLoopImage->erase(itVirtualLoopImage);
 				}
+
 				itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
 				if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
 				{
