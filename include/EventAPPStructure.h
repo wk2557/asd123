@@ -76,11 +76,14 @@ struct EventAPPParam
 struct EventAPPResult
 {
 	int mID;															// 物体的ID
-	int mNumOfImage;													// 图像的个数
+	int mNumOfViedoImage;												// 用于合成录像的图像的个数
+	int mNumOfSynthesisImage;											// 用于合成大图片的原始图片个数
 	wchar_t mPlate[LPR_PLATE_STR_LEN];									// 物体的车牌号
 	VSDBreakRule mBreakRule;											// ID物体违反的规则
-	LPRImage* mImage[MAX_FRAM_AHEAD + MAX_FRAM_BHEIND + 3];			    // 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
+	LPRImage* mViedoImage[MAX_FRAM_AHEAD + MAX_FRAM_BHEIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
 																		// 如果mBreakRule不是VSD_BR_NONE，那么前MAX_FRAM_AHEAD + MAX_FRAM_BEHIND张用来合成录像，后面三张分别是接触停车线，离开停车线，违章时的三张图片
+	LPRImage* mSynthesisImage[MAX_SYNTHESIS_NUM];
+	VSDRect mRect;														// 用于保存物体在mSynthesisImage的第一个图片中的位置，用于取放大图片的位置用 
 };
 
 
