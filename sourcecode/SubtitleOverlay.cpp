@@ -110,15 +110,27 @@ SubtitleOverlay& SubtitleOverlay::getInstance()
 	return so;
 }
 
-void SubtitleOverlay::initialize(const string &str, int fontSize, int fontImageWidth, int fontImageHeight)
+void SubtitleOverlay::initialize(const string &str, const EventFont &fontParam)
 {
-	// 确保宽和高是4的倍数
-	fontImageWidth = (fontImageWidth + 3) / 4 * 4;
-	fontImageHeight = (fontImageHeight + 3) / 4 * 4;
+	mFontParam = fontParam;
 	//////////////////////////////////////////////////////////////////////////
-	mFontSize = fontSize;
-	mFontImgWidth = fontImageWidth;
-	mFontImgHeight = fontImageHeight;
+	// 确定图片的大小，确保宽和高是4的倍数
+	int fontImageWidth = (mFontParam.mFontSize + 3) / 4 * 4;
+	int fontImageHeight = (mFontParam.mFontSize + 3) / 4 * 4;
+	// 确定字体家族
+	const wchar_t *fontFamilyName;
+	switch (fontParam.mFontFamily)
+	{
+	case EVENT_APP_FONT_SONG:
+		fontFamilyName = L"宋体";
+		break;
+	case EVENT_APP_FONT_HEI:
+		fontFamilyName = L"黑体";
+		break;
+	default:
+		printf("Unsupported font family: %d.\n", fontParam.mFontFamily);
+		return;
+	}
 	//////////////////////////////////////////////////////////////////////////
 	wchar_t *wstr = new wchar_t[str.size()];	// 宽字符肯定不会超过str.size()
 	int wstrSize = str2wstr(wstr, str.c_str(), str.size());
@@ -131,13 +143,13 @@ void SubtitleOverlay::initialize(const string &str, int fontSize, int fontImageW
 	HDC memDC = CreateCompatibleDC(NULL);
 	HBITMAP hbm = CreateBitmap(fontImageWidth, fontImageHeight, 1, 32, NULL);	// 默认黑底
 	HGDIOBJ hbmOld = SelectObject(memDC, hbm);
-	int fontHeight = fontSize;//-MulDiv(fontSize, GetDeviceCaps(memDC, LOGPIXELSY), 72);
+	int fontHeight = mFontParam.mFontSize;//-MulDiv(fontSize, GetDeviceCaps(memDC, LOGPIXELSY), 72);
 	HFONT hfont = CreateFont(fontHeight, 0, 0, 0, FW_THIN, false, false, false,
 		DEFAULT_CHARSET, OUT_CHARACTER_PRECIS,
 		CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY,
-		FF_MODERN, L"宋体");					// 字体家族，可以作为参数调整
+		FF_MODERN, fontFamilyName);
 	HGDIOBJ hfontOld = SelectObject(memDC, hfont);
-	COLORREF colorOld = SetTextColor(memDC, RGB(255, 0, 0));	// 字体颜色，可以作为参数调整
+	COLORREF colorOld = SetTextColor(memDC, mFontParam.mFontColor);
 	int bkmodeOld = SetBkMode(memDC, TRANSPARENT);
 	//////////////////////////////////////////////////////////////////////////
 	RECT imgRect = {0, 0, fontImageWidth, fontImageHeight};
@@ -170,12 +182,7 @@ void SubtitleOverlay::initialize(const string &str, int fontSize, int fontImageW
 	delete []wstr;
 }
 
-bool SubtitleOverlay::overlaySubtitle(const string &imageFilePath, const string &subtitle, int startX, int startY)
-{
-	return overlaySubtitle(imageFilePath, imageFilePath, subtitle, startX, startY);
-}
-
-bool SubtitleOverlay::overlaySubtitle(const string &imageFilePath, const string &saveAsPath, const string &subtitle, int startX, int startY)
+LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &subtitle, const EventFont &fontParam)
 {
 	if (subtitle.size() > 0)
 	{
@@ -186,66 +193,59 @@ bool SubtitleOverlay::overlaySubtitle(const string &imageFilePath, const string 
 		int imgHeight = fontImg->height;
 		int imgDepth = fontImg->depth;
 		int imgChannels = fontImg->nChannels;
-		LPRImage *subtitleImg = LPRCreateImage(wstrSize*imgWidth, imgHeight, imgDepth, imgChannels);
-		for (int i = 0;i < wstrSize; ++ i)
+		LPRImage *subtitleImg = NULL;
+		switch (fontParam.mFontOrientation)
 		{
-			RECT r;
-			r.left = i * imgWidth;
-			r.top  = 0; 
-			r.right = i * imgWidth + imgWidth;
-			r.bottom = imgHeight;
-			fontImg = characterImage(wstr[i]);
-			LPRCopySubImageToLarge(fontImg, subtitleImg, r);
+		case EVENT_APP_FONT_HORIZONTAL:
+			{
+				subtitleImg = LPRCreateImage(wstrSize*imgWidth, imgHeight, imgDepth, imgChannels);
+				for (int i = 0;i < wstrSize; ++ i)
+				{
+					RECT r;
+					r.left = i * imgWidth;
+					r.top  = 0; 
+					r.right = i * imgWidth + imgWidth;
+					r.bottom = imgHeight;
+					fontImg = characterImage(wstr[i]);
+					LPRCopySubImageToLarge(fontImg, subtitleImg, r);
+				}
+			}
+			break;
+		case EVENT_APP_FONT_VERTICAL:
+			{
+				subtitleImg = LPRCreateImage(imgWidth, wstrSize*imgHeight, imgDepth, imgChannels);
+				for (int i = 0;i < wstrSize; ++ i)
+				{
+					RECT r;
+					r.left = 0;
+					r.top  = i * imgHeight; 
+					r.right = imgWidth;
+					r.bottom = i * imgHeight + imgHeight;
+					fontImg = characterImage(wstr[i]);
+					LPRCopySubImageToLarge(fontImg, subtitleImg, r);
+				}
+			}
+			break;
+		default:
+			printf("Unsupported font orientation.\n");
+			return NULL;
 		}
-		LPRImage* pImBackground = NULL;
-		LPRLoadImage(imageFilePath.c_str(), &pImBackground);
-		LPROverlay(subtitleImg, pImBackground, startX, startY);
-		LPRSaveImage(pImBackground, saveAsPath.c_str());
-		//////////////////////////////////////////////////////////////////////////
-		LPRReleaseImage(subtitleImg);
-		LPRReleaseImage(pImBackground);
-		delete []wstr;
-		return true;
-	}
-	return false;
-}
-
-bool SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &saveAsPath, const string &subtitle, int startX, int startY)
-{
-	if (subtitle.size() > 0)
-	{
-		wchar_t *wstr = new wchar_t[subtitle.size()];
-		int wstrSize = str2wstr(wstr, subtitle.c_str(), subtitle.size());
-		LPRImage *fontImg = characterImage(wstr[0]);
-		int imgWidth = fontImg->width;
-		int imgHeight = fontImg->height;
-		int imgDepth = fontImg->depth;
-		int imgChannels = fontImg->nChannels;
-		LPRImage *subtitleImg = LPRCreateImage(wstrSize*imgWidth, imgHeight, imgDepth, imgChannels);
-		for (int i = 0;i < wstrSize; ++ i)
-		{
-			RECT r;
-			r.left = i * imgWidth;
-			r.top  = 0; 
-			r.right = i * imgWidth + imgWidth;
-			r.bottom = imgHeight;
-			fontImg = characterImage(wstr[i]);
-			LPRCopySubImageToLarge(fontImg, subtitleImg, r);
-		}
+			
+		
 		// 从JPG码流中解压出BGR24
 		LPRImage *pImBackground = NULL;
 		LPRDecodeImage(&pImBackground, pRawImage->pData, pRawImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
-		LPRReleaseImage(pRawImage);	// 释放JPG码流
+		//LPRReleaseImage(pRawImage);	// 释放JPG码流
 		//////////////////////////////////////////////////////////////////////////
-		LPROverlay(subtitleImg, pImBackground, startX, startY);
-		LPRSaveImage(pImBackground, saveAsPath.c_str());
+		LPROverlay(subtitleImg, pImBackground, fontParam.mFontX, fontParam.mFontY);
+		//LPRSaveImage(pImBackground, saveAsPath.c_str());
 		//////////////////////////////////////////////////////////////////////////
 		LPRReleaseImage(subtitleImg);
-		LPRReleaseImage(pImBackground);
+		//LPRReleaseImage(pImBackground);
 		delete []wstr;
-		return true;
+		return pImBackground;
 	}
-	return false;
+	return NULL;
 }
 
 bool SubtitleOverlay::bitmapToLPRImage(HDC hdc, HBITMAP hbm, LPRImage **pImagePtr)
@@ -303,27 +303,45 @@ LPRImage* SubtitleOverlay::characterImage(wchar_t ch)
 		return it->second;
 	else
 	{
+		// 确定图片的大小，确保宽和高是4的倍数
+		int fontImageWidth = (mFontParam.mFontSize + 3) / 4 * 4;
+		int fontImageHeight = (mFontParam.mFontSize + 3) / 4 * 4;
+		// 确定字体家族
+		const wchar_t *fontFamilyName;
+		switch (mFontParam.mFontFamily)
+		{
+		case EVENT_APP_FONT_SONG:
+			fontFamilyName = L"宋体";
+			break;
+		case EVENT_APP_FONT_HEI:
+			fontFamilyName = L"黑体";
+			break;
+		default:
+			printf("Unsupported font family: %d, using default.\n", mFontParam.mFontFamily);
+			fontFamilyName = L"宋体";
+			break;
+		}
 		//////////////////////////////////////////////////////////////////////////
 		HDC memDC = CreateCompatibleDC(NULL);
-		HBITMAP hbm = CreateBitmap(mFontImgWidth, mFontImgHeight, 1, 32, NULL);	// 默认黑底
+		HBITMAP hbm = CreateBitmap(fontImageWidth, fontImageHeight, 1, 32, NULL);	// 默认黑底
 		HGDIOBJ hbmOld = SelectObject(memDC, hbm);
-		int fontHeight = mFontSize;//-MulDiv(fontSize, GetDeviceCaps(memDC, LOGPIXELSY), 72);
+		int fontHeight = mFontParam.mFontSize;//-MulDiv(fontSize, GetDeviceCaps(memDC, LOGPIXELSY), 72);
 		HFONT hfont = CreateFont(fontHeight, 0, 0, 0, FW_THIN, false, false, false,
 			DEFAULT_CHARSET, OUT_CHARACTER_PRECIS,
 			CLIP_CHARACTER_PRECIS, DEFAULT_QUALITY,
-			FF_MODERN, L"宋体");					// 字体家族，可以作为参数调整
+			FF_MODERN, fontFamilyName);
 		HGDIOBJ hfontOld = SelectObject(memDC, hfont);
-		COLORREF colorOld = SetTextColor(memDC, RGB(255, 0, 0));	// 字体颜色，可以作为参数调整
+		COLORREF colorOld = SetTextColor(memDC, mFontParam.mFontColor);
 		int bkmodeOld = SetBkMode(memDC, TRANSPARENT);
 		//////////////////////////////////////////////////////////////////////////
-		RECT imgRect = {0, 0, mFontImgWidth, mFontImgHeight};
+		RECT imgRect = {0, 0, fontImageWidth, fontImageHeight};
 		SIZE fontPixSize;
 		LPRImage *pFontImage;
 		//char savePath[256];
 		//////////////////////////////////////////////////////////////////////////
 		FillRect(memDC, &imgRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
 		GetTextExtentPoint32(memDC, &ch, 1, &fontPixSize);
-		TextOut(memDC, (mFontImgWidth - fontPixSize.cx) / 2, (mFontImgHeight - fontPixSize.cy) / 2, &ch, 1);
+		TextOut(memDC, (fontImageWidth - fontPixSize.cx) / 2, (fontImageHeight - fontPixSize.cy) / 2, &ch, 1);
 		bitmapToLPRImage(memDC, hbm, &pFontImage);
 		//_snprintf(savePath, 256, "d:\\font_image_%d.jpg", 1111);
 		//LPRSaveImage(pFontImage, savePath);

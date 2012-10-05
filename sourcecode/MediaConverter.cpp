@@ -451,7 +451,7 @@ bool MediaConverter::outputFrame(LPRImage *pRawImage)
 	// 先解码JPG码流
 	LPRImage *pImage = NULL;
 	LPRDecodeImage(&pImage, pRawImage->pData, pRawImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
-	LPRReleaseImage(pRawImage);
+	//LPRReleaseImage(pRawImage);
 	//////////////////////////////////////////////////////////////////////////
 	// 从pImage中拷贝数据
 	mSwsContextPtr = sws_getCachedContext(mSwsContextPtr, pImage->width, pImage->height, PIX_FMT_BGR24, 
