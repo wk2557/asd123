@@ -233,7 +233,7 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	*(pValue + 6) = (int*)new StatusMap;									// EventAPP的第七个成员保存每个物体的某个breakrule是否已经录制过视频，防止录制相同物体的相同违章
 	*(pValue + 7) = (int*)new MediaConverter((EventAPPViedoFormat)irParam.mRecordParam.mViedoFormat);  // EventAPP的第八个成员保存MediaConvertoer，用了录制视频
 	SubtitleOverlay* pSubTitleOverlay = &SubtitleOverlay::getInstance();
-	//pSubTitleOverlay->initialize("0123456789km", 40, 48, 48);
+	pSubTitleOverlay->initialize("0123456789km", irParam.mFont);
 	*(pValue + 8) = (int*)pSubTitleOverlay;					                // EventAPP的第九个成员用来叠加字母
 	*(pValue + 9) = NULL;													// EventAPP的第十个成员用了识别车牌
 	*(pValue + 10) = (int*)new PlateMap;									// EventAPP的第十一个成员用了保存每个车的车牌号
@@ -418,11 +418,13 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 			{
 				// 初始化局部参数。
 				LPRParamLocal	localParam;
-				// 识别区域设为当前物体的矩形框
-				localParam.m_rectRegion.left = lObject.rect.x; 
-				localParam.m_rectRegion.right = lObject.rect.x + lObject.rect.width;
-				localParam.m_rectRegion.top = lObject.rect.y; 
-				localParam.m_rectRegion.bottom = lObject.rect.y + lObject.rect.height;
+				// 识别区域设为当前物体的矩形框，因为物体矩形框有时比较小，没有包括车牌所在的范围，因为我们扩大搜索范围
+				int lEnlargeWidth = lObject.rect.width / 2;
+				int lEnlargeHeight = lObject.rect.height / 2;
+				localParam.m_rectRegion.left = MaxT(lObject.rect.x - lEnlargeWidth, 0);
+				localParam.m_rectRegion.right = MinT(lObject.rect.x + lObject.rect.width + lEnlargeWidth, *pImageWidth);
+				localParam.m_rectRegion.top = MaxT(lObject.rect.y - lEnlargeHeight, 0);
+				localParam.m_rectRegion.bottom = MinT(lObject.rect.y + lObject.rect.height + lEnlargeHeight, *pImageHeight);
 				localParam.m_nMinPlateWidth = DEFAULT_PLATE_MIN_WIDTH; 
 				localParam.m_nMaxPlateWidth = DEFAULT_PLATE_MAX_WIDTH;
 				localParam.m_fltReserved0 = 0;
@@ -495,14 +497,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		if(GetCrossRatio(laneMark[2 * lObject.nLoopID], objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID << std::endl;
+			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID  << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_CROSS_LANE;
 		}
 		if(GetCrossRatio(laneMark[2 * lObject.nLoopID + 1], objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID << std::endl;
+			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID  <<  std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_CROSS_LANE;
 		}
@@ -529,7 +531,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		if(!(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(pAPPParam->mStraightLine, objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章直行" << lObject.nLoopID << std::endl;
+			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章直行" << lObject.nLoopID  << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STRAIGHT_THROUGH;
 		}
@@ -584,6 +586,10 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							{
 								lpResult.mPlate[i] = itPlate->second[i];
 							}
+						}
+						else
+						{
+							lpResult.mPlate[0] = 0;
 						}
 						//lResultList.push_back(lpResult);
 						opResult->mppAPPResult[lResultCount++] = lpResult;
@@ -643,6 +649,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							lpAPPResult.mPlate[i] = itPlate->second[i];
 						}
 					}
+					else
+						lpAPPResult.mPlate[0] = 0;
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -692,6 +700,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							lpAPPResult.mPlate[i] = itPlate->second[i];
 						}
 					}
+					else
+						lpAPPResult.mPlate[0] = 0;
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -741,6 +751,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							lpAPPResult.mPlate[i] = itPlate->second[i];
 						}
 					}
+					else
+						lpAPPResult.mPlate[0] = 0;
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -790,6 +802,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							lpAPPResult.mPlate[i] = itPlate->second[i];
 						}
 					}
+					else
+						lpAPPResult.mPlate[0] = 0;
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -839,6 +853,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							lpAPPResult.mPlate[i] = itPlate->second[i];
 						}
 					}
+					else
+						lpAPPResult.mPlate[0] = 0;
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -888,6 +904,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							lpAPPResult.mPlate[i] = itPlate->second[i];
 						}
 					}
+					else
+						lpAPPResult.mPlate[0] = 0;
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -937,6 +955,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 							lpAPPResult.mPlate[i] = itPlate->second[i];
 						}
 					}
+					else
+						lpAPPResult.mPlate[0] = 0;
 					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
@@ -1533,7 +1553,7 @@ int main(int argc, char *argv[])
 		EventMultiAPPResult lAPPResult;
 		VSDObjectMulti lObjectMulti;
 		LPRRESULT lResult = lEvent.ProcessFrame(&imgJPG, &lObjectMulti);
-		int lLights[MAX_VIRTUAL_LOOPS] = {1, 1, 1, 1};
+		int lLights[MAX_VIRTUAL_LOOPS] = {0, 0, 0, 0};
 		lEventApp.ProcessFram(&imgJPG,&lObjectMulti, lLights, &lAPPResult);
 		delete[] pJpgBuf;
 		FreeMultiAPPResult(&lAPPResult);
