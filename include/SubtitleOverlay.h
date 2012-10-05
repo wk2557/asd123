@@ -9,7 +9,17 @@
 using std::map;
 using std::string;
 
-bool LPRCopySubImageToLarge(const LPRImage* pImSub, LPRImage* pImLarge, RECT rect);
+/**
+ * 将pImSub图像复制到pImLarge图像的rect区域。
+ */
+bool LPRCopySubImageToLarge(const LPRImage* pImSub, LPRImage* pImLarge, const RECT &rect);
+/**
+ * 将pImLarge图像的rect区域拷贝到pImSub图像。
+ */
+bool LPRCopyLargeRegionToSub(const LPRImage *pImLarge, LPRImage *pImSub, const RECT &rect);
+/**
+ * 将pImForeground图像叠加到pImBackGround图像(x, y)开始的区域。
+ */
 bool LPROverlay(LPRImage* pImForeground, LPRImage* pImBackGround, int x, int y);
 
 class SubtitleOverlay

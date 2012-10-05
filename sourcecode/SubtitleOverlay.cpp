@@ -2,7 +2,7 @@
 #include <Windows.h>
 
 
-bool LPRCopySubImageToLarge( const LPRImage* pImSub, LPRImage* pImLarge, RECT rect )
+bool LPRCopySubImageToLarge( const LPRImage* pImSub, LPRImage* pImLarge, const RECT &rect )
 {
 	if (!pImLarge || !pImSub)
 	{
@@ -39,6 +39,49 @@ bool LPRCopySubImageToLarge( const LPRImage* pImSub, LPRImage* pImLarge, RECT re
 		}
 		pSrc += pImSub->step;
 		pDst += pImLarge->step;
+	}
+
+	return true;
+}
+
+bool LPRCopyLargeRegionToSub(const LPRImage *pImLarge, LPRImage *pImSub, const RECT &rect)
+{
+	// ½øÐÐ¼ì²é
+	if (NULL == pImLarge || NULL == pImSub)
+	{
+		return false;
+	}
+	if (pImLarge->depth != pImSub->depth || pImLarge->nChannels != pImLarge->nChannels)
+	{
+		return false;
+	}
+	int x = rect.left;
+	int y = rect.top;
+	int w = rect.right-rect.left;
+	int h = rect.bottom-rect.top;
+	int nChannels = pImLarge->nChannels;
+
+	if( rect.left < 0 || rect.top < 0 || 
+		w <= 0 || h <= 0 ||
+		w != pImSub->width ||
+		h != pImSub->height ||
+		rect.right > pImLarge->width ||
+		rect.bottom > pImLarge->height )
+	{
+		return false;
+	}
+	//////////////////////////////////////////////////////////////////////////
+	const unsigned char* pSrc = pImLarge->pData + y*pImLarge->step + x * nChannels;
+	unsigned char* pDst = pImSub->pData;
+	for (int i = 0; i < h; ++ i)
+	{
+		int bytesWidth = w * nChannels;
+		for (int j = 0; j < bytesWidth; ++ j)
+		{
+			pDst[j] = pSrc[j];
+		}
+		pSrc += pImLarge->step;
+		pDst += pImSub->step;
 	}
 
 	return true;
