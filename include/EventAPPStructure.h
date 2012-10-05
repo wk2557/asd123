@@ -45,6 +45,7 @@ struct EventImageSynthesis
 {
 	int mNumberofImage;
 	int mPicOrientation;
+	double mZoonRatio;
 };
 
 // EventAPP²ÎÊý
