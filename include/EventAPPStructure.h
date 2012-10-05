@@ -4,6 +4,7 @@
 #include "VSDEventStructure.h"
 #include "LPRStructure.h"
 #include "EventAPPConstant.h"
+#include <inttypes.h>
 
 #if defined(WIN32)
 #ifdef EVENTAPP_EXPORTS
@@ -29,6 +30,12 @@ struct EventRecordParam
 	int mViedoFormat;				   // 视频格式，取值范围为为EventAPPViedoFormat
 	int mBitFrequent;				   // 视频比特率
 	wchar_t mDirPath[MAX_DIR_PATH];    // 保存视频和图像路径
+};
+
+struct EventMedia
+{
+	uint8_t *mBufferPtr;
+	int mBufferSize;
 };
 
 struct EventFont 
