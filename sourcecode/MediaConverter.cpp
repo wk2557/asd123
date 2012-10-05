@@ -42,50 +42,10 @@ MediaConverter::MediaConverter(EventAPPViedoFormat encoderType, int outputFrameR
 
 MediaConverter::~MediaConverter(void)
 {
-	printf("Destructor\n");
 	uninitialize();
 }
 
-bool MediaConverter::imgs2media(const vector<string> &imgNames, const string &mediaName)
-{
-	if (imgNames.empty())
-	{
-		printf("Input is empty.\n");
-		return true;
-	}
-	//////////////////////////////////////////////////////////////////////////
-	if(!initialize(imgNames[1].c_str(), mediaName.c_str()))
-	{
-		printf("Failed to initialize.\n");
-		return false;
-	}
-	//////////////////////////////////////////////////////////////////////////
-	if (!(mOutputFormatCtxPtr->flags & AVFMT_NOFILE))
-	{
-		if (avio_open(&mOutputFormatCtxPtr->pb, mediaName.c_str(), AVIO_FLAG_WRITE) < 0)
-		{
-			printf("Could not open %s.\n", mediaName.c_str());
-			return false;
-		}
-	}
-	//////////////////////////////////////////////////////////////////////////
-	// Output
-	avformat_write_header(mOutputFormatCtxPtr, NULL);
-	for (vector<string>::const_iterator it = imgNames.begin(), e = imgNames.end(); it != e; ++ it)
-		convertMedia(it->c_str());
-	flushFrames();
-	av_write_trailer(mOutputFormatCtxPtr);
-	//////////////////////////////////////////////////////////////////////////
-	if (!(mOutputFormatCtxPtr->flags & AVFMT_NOFILE))
-		avio_close(mOutputFormatCtxPtr->pb);
-	//////////////////////////////////////////////////////////////////////////
-	// 清理环境
-	uninitialize();
-
-	return true;
-}
-
-bool MediaConverter::imgs2media(LPRImage *pRawImages[], size_t imgCount, const string &mediaName)
+bool MediaConverter::imgs2media(LPRImage *pRawImages[], size_t imgCount, EventMedia &eventMedia)
 {
 	if (imgCount == 0)
 	{
@@ -93,7 +53,7 @@ bool MediaConverter::imgs2media(LPRImage *pRawImages[], size_t imgCount, const s
 		return true;
 	}
 	//////////////////////////////////////////////////////////////////////////
-	if(!initialize(pRawImages[0], mediaName.c_str()))
+	if(!initialize(pRawImages[0], "temp.avi"))
 	{
 		printf("Failed to initialize.\n");
 		return false;
@@ -101,9 +61,14 @@ bool MediaConverter::imgs2media(LPRImage *pRawImages[], size_t imgCount, const s
 	//////////////////////////////////////////////////////////////////////////
 	if (!(mOutputFormatCtxPtr->flags & AVFMT_NOFILE))
 	{
-		if (avio_open(&mOutputFormatCtxPtr->pb, mediaName.c_str(), AVIO_FLAG_WRITE) < 0)
+		/*if (avio_open(&mOutputFormatCtxPtr->pb, mediaName.c_str(), AVIO_FLAG_WRITE) < 0)
 		{
-			printf("Could not open %s.\n", mediaName.c_str());
+		printf("Could not open %s.\n", mediaName.c_str());
+		return false;
+		}*/
+		if (avio_open_dyn_buf(&mOutputFormatCtxPtr->pb) < 0)
+		{
+			printf("Could not open avio buff.\n");
 			return false;
 		}
 	}
@@ -116,7 +81,10 @@ bool MediaConverter::imgs2media(LPRImage *pRawImages[], size_t imgCount, const s
 	av_write_trailer(mOutputFormatCtxPtr);
 	//////////////////////////////////////////////////////////////////////////
 	if (!(mOutputFormatCtxPtr->flags & AVFMT_NOFILE))
-		avio_close(mOutputFormatCtxPtr->pb);
+	{
+		//avio_close(mOutputFormatCtxPtr->pb);
+		eventMedia.mBufferSize = avio_close_dyn_buf(mOutputFormatCtxPtr->pb, &eventMedia.mBufferPtr);
+	}
 	//////////////////////////////////////////////////////////////////////////
 	// 清理环境
 	uninitialize();
@@ -124,56 +92,9 @@ bool MediaConverter::imgs2media(LPRImage *pRawImages[], size_t imgCount, const s
 	return true;
 }
 
-bool MediaConverter::initialize(const char *inputMediaName, const char *outputMediaName)
-{
-	return initializeInput(inputMediaName) && initializeOutput(outputMediaName);
-}
-
 bool MediaConverter::initialize(const LPRImage *pRawImage, const char *outputMediaName)
 {
 	return initializeInput(pRawImage) && initializeOutput(outputMediaName);
-}
-
-bool MediaConverter::initializeInput(const char *inputMediaName)
-{
-	// 解析输入媒体的信息
-	AVFormatContext *pInputFormatCtx = NULL;
-	if (avformat_open_input(&pInputFormatCtx, inputMediaName, NULL, NULL) != 0)
-	{
-		printf("Failed to open %s.\n", inputMediaName);
-		return false;
-	}
-	if (avformat_find_stream_info(pInputFormatCtx, NULL) < 0)
-	{
-		printf("Failed to parse %s.\n", inputMediaName);
-		return false;
-	}
-	av_dump_format(pInputFormatCtx, 0, inputMediaName, 0);
-	int videoStreamIndex = -1;
-	for (size_t i = 0; i < pInputFormatCtx->nb_streams; ++ i)
-	{
-		if (pInputFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-		{
-			videoStreamIndex = i;
-			break;
-		}
-	}
-	if (videoStreamIndex == -1)
-	{
-		printf("Could not find a video stream.\n");
-		return false;
-	}
-	AVCodecContext *pInputCodecCtx = pInputFormatCtx->streams[videoStreamIndex]->codec;
-	// 输入媒体的宽高和输出媒体的宽高保持一致
-	mOutputWidth = pInputCodecCtx->width;
-	mOutputHeight = pInputCodecCtx->height;
-	//////////////////////////////////////////////////////////////////////////
-	// 参数已经读取完毕，释放资源
-	avcodec_close(pInputCodecCtx);
-	avformat_close_input(&pInputFormatCtx);
-
-	mInputFramePtr = avcodec_alloc_frame();
-	return true;
 }
 
 bool MediaConverter::initializeInput(const LPRImage *pRawImage)
@@ -328,122 +249,6 @@ void MediaConverter::uninitializeOutput()
 	}
 	mPTS = 0;
 	isOutputBuffered = false;
-}
-
-bool MediaConverter::convertMedia(const char *inputMediaName)
-{
-	// 解析输入媒体的信息
-	AVFormatContext *pInputFormatCtx = NULL;
-	if (avformat_open_input(&pInputFormatCtx, inputMediaName, NULL, NULL) != 0)
-	{
-		printf("Failed to open %s.\n", inputMediaName);
-		return false;
-	}
-	if (avformat_find_stream_info(pInputFormatCtx, NULL) < 0)
-	{
-		printf("Failed to parse %s.\n", inputMediaName);
-		return false;
-	}
-	//av_dump_format(pInputFormatCtx, 0, inputMediaName, 0);
-	int videoStreamIndex = -1;
-	for (size_t i = 0; i < pInputFormatCtx->nb_streams; ++ i)
-	{
-		if (pInputFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-		{
-			videoStreamIndex = i;
-			break;
-		}
-	}
-	if (videoStreamIndex == -1)
-	{
-		printf("Could not find a video stream.\n");
-		return false;
-	}
-	AVCodecContext *pInputCodecCtx = pInputFormatCtx->streams[videoStreamIndex]->codec;
-	// Find the decoder for the video stream
-	AVCodec *pCodec = avcodec_find_decoder(pInputCodecCtx->codec_id);
-	if (NULL == pCodec)
-	{
-		printf("Could not find decoder.\n");
-		return false;
-	}
-	// Open codec
-	if (avcodec_open2(pInputCodecCtx, pCodec, NULL) != 0)
-	{
-		printf("Could not open decoder.\n");
-		return false;
-	}
-	//////////////////////////////////////////////////////////////////////////
-	// Read media content
-	AVPacket packet;
-	int frameFinished = 0;
-	while (av_read_frame(pInputFormatCtx, &packet) >= 0)
-	{
-		if (packet.stream_index == videoStreamIndex)
-		{
-			avcodec_decode_video2(pInputCodecCtx, mInputFramePtr, &frameFinished, &packet);
-			if (frameFinished)
-			{
-				// do something with mInputFramePtr
-
-				mInputPixFmt = pInputCodecCtx->pix_fmt;
-				if (!outputFrame())
-					return false;
-			}
-		}
-		av_free_packet(&packet);
-	}
-
-	avcodec_close(pInputCodecCtx);
-	avformat_close_input(&pInputFormatCtx);
-
-	return true;
-}
-
-bool MediaConverter::outputFrame()
-{
-	AVFrame *pFrame;
-	// Transfer format from input frame to output frame
-	if (mInputPixFmt != mOutputPixFmt)
-	{
-		mSwsContextPtr = sws_getCachedContext(mSwsContextPtr, mOutputWidth, mOutputHeight, mInputPixFmt, 
-			mOutputWidth, mOutputHeight, mOutputPixFmt, SWS_BICUBIC, NULL, NULL, NULL);
-		if (NULL == mSwsContextPtr)
-		{
-			printf("Could not initialize the conversion context.\n");
-			return false;
-		}
-		int ret = sws_scale(mSwsContextPtr, mInputFramePtr->data, mInputFramePtr->linesize, 0, mOutputHeight, mOutputFramePtr->data, mOutputFramePtr->linesize);
-		assert(ret != 0);
-		pFrame = mOutputFramePtr;
-	}
-	else
-		pFrame = mInputFramePtr;
-	pFrame->pts = nextPTS();
-	//////////////////////////////////////////////////////////////////////////
-	int got_packet = 0;
-	AVPacket packet;
-	av_init_packet(&packet);
-	packet.data = mEncodeBuff;
-	packet.size = mEncodeBuffSize;
-	int ret = avcodec_encode_video2(mOutputCodecCtxPtr, &packet, pFrame, &got_packet);
-	//printf("outsize=%d getpacket=%d packetsize=%d stream_index=%d\n", ret, got_packet, packet.size, packet.stream_index);
-	if (got_packet == 1)
-	{
-		if (packet.pts != AV_NOPTS_VALUE)
-			packet.pts = av_rescale_q(packet.pts, mOutputCodecCtxPtr->time_base, mOutputStreamPtr->time_base);
-		if (packet.dts != AV_NOPTS_VALUE)
-			packet.dts = av_rescale_q(packet.dts, mOutputCodecCtxPtr->time_base, mOutputStreamPtr->time_base);
-		if (mOutputCodecCtxPtr->coded_frame->key_frame)
-			packet.pts |= AV_PKT_FLAG_KEY;
-
-		int ret = av_interleaved_write_frame(mOutputFormatCtxPtr, &packet);
-		//printf("after pts=%d dts=%d ret=%d\n", (int)packet.pts, (int)packet.dts, ret);
-		return 0 == ret;
-	}
-	else
-		isOutputBuffered = true;
-	return true;
 }
 
 bool MediaConverter::outputFrame(LPRImage *pRawImage)
