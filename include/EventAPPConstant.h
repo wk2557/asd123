@@ -10,7 +10,7 @@ enum EventAPPFontFamily
 
 enum EventAPPFontOrientation
 {
-	EVENT_APP_FONT_Vertical		= 0,
+	EVENT_APP_FONT_VERTICAL		= 0,
 	EVENT_APP_FONT_HORIZONTAL	= 1,
 };
 
@@ -18,7 +18,7 @@ enum EventAPPPicOrientation
 {
 	EVENT_APP_PIC_VERTICAL		= 0,
 	EVENT_APP_PIC_HORIZONTAL	= 1,
-	EVNET_APP_PIC_GRID			= 2,
+	EVENT_APP_PIC_GRID			= 2,
 };
 
 enum EventAPPLightStatus

@@ -29,11 +29,12 @@ public:
 	 * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
 	 *
 	 * param pRawImage - 以JPG格式编码过的图像（目前仅支持JPG码流输入）
-	 * param saveAsPath - 图片另存为路径
 	 * param subtitle - 字幕内容
 	 * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
+	 *
+	 * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
 	 */
-	bool overlaySubtitle(LPRImage *pRawImage, const string &saveAsPath, const string &subtitle, const EventFont &fontParam);
+	LPRImage* overlaySubtitle(LPRImage *pRawImage, const string &subtitle, const EventFont &fontParam);
 private:
 	SubtitleOverlay(void) {}
 	SubtitleOverlay(const SubtitleOverlay &other) {}

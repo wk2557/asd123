@@ -155,7 +155,7 @@ void SubtitleOverlay::initialize(const string &str, const EventFont &fontParam)
 	RECT imgRect = {0, 0, fontImageWidth, fontImageHeight};
 	SIZE fontPixSize;
 	LPRImage *pFontImage;
-	char savePath[256];
+	//char savePath[256];
 	for (int i = 0; i < wstrSize; ++ i)
 	{
 		map<wchar_t, LPRImage*>::const_iterator it = mCharImageMap.find(wstr[i]);
@@ -165,8 +165,8 @@ void SubtitleOverlay::initialize(const string &str, const EventFont &fontParam)
 			GetTextExtentPoint32(memDC, &wstr[i], 1, &fontPixSize);
 			TextOut(memDC, (fontImageWidth - fontPixSize.cx) / 2, (fontImageHeight - fontPixSize.cy) / 2, &wstr[i], 1);
 			bitmapToLPRImage(memDC, hbm, &pFontImage);
-			_snprintf(savePath, 256, "d:\\font_image_%d.jpg", i);
-			LPRSaveImage(pFontImage, savePath);
+			//_snprintf(savePath, 256, "d:\\font_image_%d.jpg", i);
+			//LPRSaveImage(pFontImage, savePath);
 			mCharImageMap[wstr[i]] = pFontImage;
 		}
 	}
@@ -182,7 +182,7 @@ void SubtitleOverlay::initialize(const string &str, const EventFont &fontParam)
 	delete []wstr;
 }
 
-bool SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &saveAsPath, const string &subtitle, const EventFont &fontParam)
+LPRImage* SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &subtitle, const EventFont &fontParam)
 {
 	if (subtitle.size() > 0)
 	{
@@ -211,7 +211,7 @@ bool SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &saveAsP
 				}
 			}
 			break;
-		case EVENT_APP_FONT_Vertical:
+		case EVENT_APP_FONT_VERTICAL:
 			{
 				subtitleImg = LPRCreateImage(imgWidth, wstrSize*imgHeight, imgDepth, imgChannels);
 				for (int i = 0;i < wstrSize; ++ i)
@@ -228,7 +228,7 @@ bool SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &saveAsP
 			break;
 		default:
 			printf("Unsupported font orientation.\n");
-			return false;
+			return NULL;
 		}
 			
 		
@@ -238,14 +238,14 @@ bool SubtitleOverlay::overlaySubtitle(LPRImage *pRawImage, const string &saveAsP
 		LPRReleaseImage(pRawImage);	// ÊÍ·ÅJPGÂëÁ÷
 		//////////////////////////////////////////////////////////////////////////
 		LPROverlay(subtitleImg, pImBackground, fontParam.mFontX, fontParam.mFontY);
-		LPRSaveImage(pImBackground, saveAsPath.c_str());
+		//LPRSaveImage(pImBackground, saveAsPath.c_str());
 		//////////////////////////////////////////////////////////////////////////
 		LPRReleaseImage(subtitleImg);
-		LPRReleaseImage(pImBackground);
+		//LPRReleaseImage(pImBackground);
 		delete []wstr;
-		return true;
+		return pImBackground;
 	}
-	return false;
+	return NULL;
 }
 
 bool SubtitleOverlay::bitmapToLPRImage(HDC hdc, HBITMAP hbm, LPRImage **pImagePtr)
