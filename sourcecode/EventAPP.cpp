@@ -1115,8 +1115,7 @@ EventAPP::~EventAPP()
 
 	delete pImageHeight;
 	delete pImageWidth;
-
-	delete pImageWidth;
+	delete pImageSynthesis;
 }
 
 APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, LPRImage** oppImage)
