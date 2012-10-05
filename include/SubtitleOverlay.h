@@ -1,6 +1,7 @@
 #ifndef SUBTITLEOVERLAY_H
 #define SUBTITLEOVERLAY_H
 
+#include "EventAPPStructure.h"
 #include <LPRVideo.h>
 #include <string>
 #include <map>
@@ -17,44 +18,23 @@ public:
 	virtual ~SubtitleOverlay(void);
 	static SubtitleOverlay& getInstance();
 	/**
-	 * 将指定字库中的字按照给定大小生成在指定大小的图片中，并缓存在图片中。为了效率起见，
+	 * 将指定字库中的字按照给定的参数生成图片，并缓存。为了效率起见，
 	 * 请确保字库中的字已经覆盖了以后将要用到的所有字。
 	 *
 	 * param str - 字库
-	 * param fontSize - 字体大小，以像素为单位
-	 * param fontImageWidth - 生成图片的宽度，以像素为单位
-	 * param fontImageHeight - 生成图片的高度，以像素为单位
+	 * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
 	 */
-	void initialize(const string &str, int fontSize, int fontImageWidth, int fontImageHeight);
-	/**
-	 * 给指定的图片在指定的位置添加指定的字幕。 
-	 *
-	 * param imageFilePath - 图片路径（支持LPRImage支持的所有图片类型）
-	 * param subtitle - 字幕内容
-	 * param startX - 字幕开始的x坐标，采用屏幕坐标系
-	 * param startY - 字幕开始的y坐标，采用屏幕坐标系
-	 */
-	bool overlaySubtitle(const string &imageFilePath, const string &subtitle, int startX = 0, int startY = 0);
-	/**
-	 * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
-	 *
-	 * param imageFilePath - 图片路径（支持LPRImage支持的所有图片类型）
-	 * param saveAsPath - 图片另存为路径
-	 * param subtitle - 字幕内容
-	 * param startX - 字幕开始的x坐标，采用屏幕坐标系
-	 * param startY - 字幕开始的y坐标，采用屏幕坐标系
-	 */
-	bool overlaySubtitle(const string &imageFilePath, const string &saveAsPath, const string &subtitle, int startX = 0, int startY = 0);
+	void initialize(const string &str, const EventFont &fontParam);
 	/**
 	 * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
 	 *
 	 * param pRawImage - 以JPG格式编码过的图像（目前仅支持JPG码流输入）
-	 * param saveAsPath - 图片另存为路径
 	 * param subtitle - 字幕内容
-	 * param startX - 字幕开始的x坐标，采用屏幕坐标系
-	 * param startY - 字幕开始的y坐标，采用屏幕坐标系
+	 * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
+	 *
+	 * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
 	 */
-	bool overlaySubtitle(LPRImage *pRawImage, const string &saveAsPath, const string &subtitle, int startX = 0, int startY = 0);
+	LPRImage* overlaySubtitle(LPRImage *pRawImage, const string &subtitle, const EventFont &fontParam);
 private:
 	SubtitleOverlay(void) {}
 	SubtitleOverlay(const SubtitleOverlay &other) {}
@@ -64,10 +44,8 @@ private:
 private:
 	map<wchar_t, LPRImage*> mCharImageMap;	// 字符到图片的映射
 
-	// 字体相关
-	int mFontSize;
-	int mFontImgWidth;
-	int mFontImgHeight;
+	// 字幕参数
+	EventFont mFontParam;
 };
 
 #endif //SUBTITLEOVERLAY_H
