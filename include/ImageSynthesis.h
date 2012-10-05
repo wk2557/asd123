@@ -6,7 +6,7 @@
 class ImageSynthesis
 {
 public:
-	void synthesis(LPRImage *pImages, size_t imgsCount);
+	bool synthesis(LPRImage *pImages, size_t imgsCount);
 };
 
 #endif
