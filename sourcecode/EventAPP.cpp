@@ -281,7 +281,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	SubtitleOverlay* pSubtitleOverlay = (SubtitleOverlay*)(*(pValue + 8));
 	LPR* pLPR = (LPR*)(*(pValue + 9));
 	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 10));
-	VirtualLoopImagePool* pVirtualLoopLeavImage = (VirtualLoopImagePool*)(*(pValue + 11));
+	VirtualLoopImagePool* pVirtualLoopLeaveImage = (VirtualLoopImagePool*)(*(pValue + 11));
 
 	// 得到VSDEventParam的参数
 	VSDEventParam lVSDParam = pAPPParam->mVSDParam;
@@ -433,6 +433,15 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				}
 			}
 		}
+		else if(lObject.status & VSD_OBJ_STATUS_LEAVE_LINE)
+		{
+			VirtualLoopImagePool::iterator itVirtualImage = pVirtualLoopLeaveImage->find(lObject.uid);
+			if(itVirtualImage == pVirtualLoopLeaveImage->end())
+			{
+				LPRImage *pImage = LPRCloneImage(ipImage);
+				pVirtualLoopLeaveImage->insert(make_pair(lObject.uid, pImage));
+			}
+		}
 		
 		int lObjectHistoryStatus = VSD_BR_NONE;
 		lPoolData.mBreakRules[lObject.uid] = VSD_BR_NONE;
@@ -494,6 +503,14 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
 		}
+		// 判断是否违章停车
+		if(lObject.status & VSD_BR_STOP)
+		{
+#ifdef __DEBUG
+			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章停车" << lObject.nLoopID << std::endl;
+#endif
+			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STOP;
+		}
 		(*pStatusMap)[lObject.uid] |= lPoolData.mBreakRules[lObject.uid];
 	}
 	//ResultList lResultList;
@@ -528,8 +545,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 						opResult->mNumOfResult = lResultCount;
 						lNoBreakRuleLog << "车" << lpResult.mID << endl;
 					}
-					LPRReleaseImage(itImage->second);
-					pVirtualLoopImage->erase(itImage);
+					//LPRReleaseImage(itImage->second);
+					//pVirtualLoopImage->erase(itImage);
 				}
 				if(itStatus != pStatusMap->end())
 					pStatusMap->erase(itStatus);
@@ -567,15 +584,31 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[0];
 					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
 					int lSizeToCopy = lEndIndex - lBeginIndex;
+					int lImageCount = lSizeToCopy;
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_TURN_LEFT;
+					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
-						LPRImage *lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
+						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
 						lpAPPResult.mImage[j] = lpImage;
-						lpAPPResult.mNumOfImage = lSizeToCopy;
+						//lpAPPResult.mNumOfImage = lSizeToCopy;
 					}
+					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+
+					}
+					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+					}
+					lpAPPResult.mNumOfImage = lImageCount;
 					//lResultList.push_back(lpAPPResult);
 					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
 					opResult->mNumOfResult = lResultCount;
@@ -592,15 +625,31 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[1];
 					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
 					int lSizeToCopy = lEndIndex - lBeginIndex;
+					int lImageCount = lSizeToCopy;
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_TURN_RIGHT;
+					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
-						LPRImage *lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
+						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
 						lpAPPResult.mImage[j] = lpImage;
-						lpAPPResult.mNumOfImage = lSizeToCopy;
+						//lpAPPResult.mNumOfImage = lSizeToCopy;
 					}
+					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+
+					}
+					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+					}
+					lpAPPResult.mNumOfImage = lImageCount;
 					//lResultList.push_back(lpAPPResult);
 					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
 					opResult->mNumOfResult = lResultCount;
@@ -617,15 +666,31 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[2];
 					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
 					int lSizeToCopy = lEndIndex - lBeginIndex;
+					int lImageCount = lSizeToCopy;
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_STRAIGHT_THROUGH;
+					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
-						LPRImage *lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
+						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
 						lpAPPResult.mImage[j] = lpImage;
-						lpAPPResult.mNumOfImage = lSizeToCopy;
+						//lpAPPResult.mNumOfImage = lSizeToCopy;
 					}
+					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+
+					}
+					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+					}
+					lpAPPResult.mNumOfImage = lImageCount;
 					//lResultList.push_back(lpAPPResult);
 					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
 					opResult->mNumOfResult = lResultCount;
@@ -642,15 +707,31 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[3];
 					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
 					int lSizeToCopy = lEndIndex - lBeginIndex;
+					int lImageCount = lSizeToCopy;
 					EventAPPResult lpAPPResult; 
 					lpAPPResult.mID = itObject->first; 
 					lpAPPResult.mBreakRule = VSD_BR_CROSS_LANE;
+					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
-						LPRImage *lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
+						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
 						lpAPPResult.mImage[j] = lpImage;
-						lpAPPResult.mNumOfImage = lSizeToCopy;
+						//lpAPPResult.mNumOfImage = lSizeToCopy;
 					}
+					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+
+					}
+					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+					}
+					lpAPPResult.mNumOfImage = lImageCount;
 					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
 					opResult->mNumOfResult = lResultCount;
 					//lResultList.push_back(lpAPPResult);
@@ -667,15 +748,31 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[4];
 					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
 					int lSizeToCopy = lEndIndex - lBeginIndex;
+					int lImageCount = lSizeToCopy;
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_REVERSE;
+					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
-						LPRImage *lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
+						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
 						lpAPPResult.mImage[j] = lpImage;
-						lpAPPResult.mNumOfImage = lSizeToCopy;
+						//lpAPPResult.mNumOfImage = lSizeToCopy;
 					}
+					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+
+					}
+					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+					}
+					lpAPPResult.mNumOfImage = lImageCount;
 					//lResultList.push_back(lpAPPResult);
 					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
 					opResult->mNumOfResult = lResultCount;
@@ -692,19 +789,76 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[5];
 					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
 					int lSizeToCopy = lEndIndex - lBeginIndex;
+					int lImageCount = lSizeToCopy;
 					EventAPPResult lpAPPResult;
 					lpAPPResult.mID = itObject->first;
 					lpAPPResult.mBreakRule = VSD_BR_RED_LIGHT;
+					LPRImage *lpImage = NULL;
 					for (int j = 0; j < lSizeToCopy; ++j)
 					{
-						LPRImage *lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
+						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
 						lpAPPResult.mImage[j] = lpImage;
-						lpAPPResult.mNumOfImage = lSizeToCopy;
+						//lpAPPResult.mNumOfImage = lSizeToCopy;
 					}
+					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+
+					}
+					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+					}
+					lpAPPResult.mNumOfImage = lImageCount;
 					//lResultList.push_back(lpAPPResult);
 					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
 					opResult->mNumOfResult = lResultCount;
 					lBreakOutputLog << "车" <<lpAPPResult.mID << "违反红灯" <<endl;
+				}
+			}
+			if(itObject->second & VSD_BR_STOP)
+			{
+				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_STOP))
+				{
+					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_STOP;
+					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[6];
+					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
+					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[6];
+					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
+					int lSizeToCopy = lEndIndex - lBeginIndex;
+					int lImageCount = lSizeToCopy;
+					EventAPPResult lpAPPResult;
+					lpAPPResult.mID = itObject->first;
+					lpAPPResult.mBreakRule = VSD_BR_STOP;
+					LPRImage *lpImage = NULL;
+					for (int j = 0; j < lSizeToCopy; ++j)
+					{
+						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
+						lpAPPResult.mImage[j] = lpImage;
+						//lpAPPResult.mNumOfImage = lSizeToCopy;
+					}
+					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+
+					}
+					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+					{
+						lpImage = LPRCloneImage(itVirtualLoopImage->second);
+						lpAPPResult.mImage[lImageCount++] = lpImage;
+					}
+					lpAPPResult.mNumOfImage = lImageCount;
+					//lResultList.push_back(lpAPPResult);
+					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
+					opResult->mNumOfResult = lResultCount;
+					lBreakOutputLog << "车" <<lpAPPResult.mID << "违章停车" <<endl;
 				}
 			}
 			// 清除pRemoveStatsu里不需要的记录
@@ -719,7 +873,23 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				}
 			}
 			if(0 == lShowUp)
-				pRemoveStatusMap->erase(itObject->first);
+			{
+				StatusMap::iterator itStatusMap = pRemoveStatusMap->find(itObject->first);
+				if(itStatusMap != pRemoveStatusMap->end())
+					pRemoveStatusMap->erase(itObject->first);
+				VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
+				if (itVirtualLoopImage != pVirtualLoopImage->end())
+				{
+					LPRReleaseImage(itVirtualLoopImage->second);
+					pVirtualLoopImage->erase(itVirtualLoopImage);
+				}
+				itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
+				if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+				{
+					LPRReleaseImage(itVirtualLoopImage->second);
+					pVirtualLoopLeaveImage->erase(itVirtualLoopImage);
+				}
+			}
 		}
 	}
 
@@ -776,25 +946,38 @@ EventAPP::~EventAPP()
 	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 7));
 	LPR* pLPR = (LPR*)(*(pValue + 9));
 	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 10));
+	VirtualLoopImagePool* pVirtualLoopLeaveImage = (VirtualLoopImagePool*)(*(pValue + 11));
 
 	delete pAPPParam;
+
 	while(!pPool->empty())
 	{
 		LPRReleaseImage(pPool->front().mpImage);
 		pPool->pop_front();
 	}
 	delete pPool;
+
 	delete[] laneMark;
+
 	delete pPoolLength;
 
 	for(VirtualLoopImagePool::iterator it = pVirtualLoopImage->begin(); it != pVirtualLoopImage->end(); ++it)
 		LPRReleaseImage(it->second);
 	delete pVirtualLoopImage;
+
+	for(VirtualLoopImagePool::iterator it = pVirtualLoopLeaveImage->begin(); it != pVirtualLoopLeaveImage->end(); ++it)
+		LPRReleaseImage(it->second);
+	delete pVirtualLoopLeaveImage;
+
 	delete pStatusMap;
+
 	delete pRemoveStatusMap;
+
 	delete pMediaConverter;
+
 	pLPR->Fini();
 	delete pLPR;
+
 	for (PlateMap::iterator it = pPlateMap->begin(); it != pPlateMap->end(); ++it)
 	{
 		delete[] it->second;
