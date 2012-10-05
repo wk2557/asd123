@@ -4,6 +4,7 @@
 #define __STDC_CONSTANT_MACROS
 
 #include "EventAPPConstant.h"
+#include "EventAPPStructure.h"
 #include <LPRVideo.h>
 extern "C"
 {
@@ -36,36 +37,26 @@ public:
 	MediaConverter(EventAPPViedoFormat encoderType, int outputFrameRate = 10, int bitRate = 1000000);
 	virtual ~MediaConverter(void);
 	/**
-	 * 将指定的图片序列（支持所有libav支持的图片格式，libav支持的图片格式请参考libav文档），
-	 * 转换成流媒体（支持所有libav支持的流媒体格式，libav支持的流媒体格式请参考libav文档），
-	 * 默认的流媒体格式是avi。
-	 *
-	 * param imgNames - 图片路径序列
-	 * param mediaName - 流媒体路径
-	 */
-	bool imgs2media(const vector<string> &imgNames, const string &mediaName);
-	/**
 	 * 将指定的JPG码流序列，转换成流媒体（支持所有libav支持的流媒体格式，libav支持的流媒体格
-	 * 式请参考libav文档），默认的流媒体格式是avi。
+	 * 式请参考libav文档），默认的流媒体格式是avi。并保存在eventMedia中，eventMedia中的空
+	 * 间调用者必须自己释放。
 	 *
 	 * param imgNames - 图片路径序列
-	 * param mediaName - 流媒体路径
+	 * param imgCount - 图片张数
+	 * param eventMedia - 流媒体缓冲区
+	 *
+	 * param 成功则返回true，这时候eventMedia可用，否则返回false，eventMedia不可用。
 	 */
-	bool imgs2media(LPRImage *pRawImages[], size_t imgCount, const string &mediaName);
+	bool imgs2media(LPRImage *pRawImages[], size_t imgCount, EventMedia &eventMedia);
 private:
 	/* 根据输入和输出媒体初始化上下文，该方法必须在调用任何方法之前被调用过 */
-	bool initialize(const char *inputMediaName, const char *outputMediaName);
 	bool initialize(const LPRImage *pRawImage, const char *outputMediaName);
 	bool initializeInput(const LPRImage *pRawImage);
-	bool initializeInput(const char *inputMediaName);
 	bool initializeOutput(const char *outputMediaName);
 	void uninitialize();
 	void uninitializeInput();
 	void uninitializeOutput();
-	/* 转换媒体 */
-	bool convertMedia(const char *inputMediaName);
 	/* 输出帧 */
-	bool outputFrame();
 	bool outputFrame(LPRImage *pRawImage);
 	bool flushFrames();
 	int64_t nextPTS()
