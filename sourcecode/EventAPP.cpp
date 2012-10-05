@@ -193,9 +193,6 @@ static double __stdcall GetCrossRatio(const VSDRatioLine& irLine, const VSDRatio
 	return minArea * 4 / areaRect;
 }
 
-
-
-
 struct PoolData
 {
 	std::map<int, int> mBreakRules;

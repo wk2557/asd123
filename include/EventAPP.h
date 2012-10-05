@@ -49,6 +49,9 @@ public:
 	// 输出参数 opResult: 输出到当前图片为止，刚刚离开跟踪区域的车辆的图片序列以及是否违章等信息，见EventMultiAPPResult的表述
 	APPRESULT ProcessFram(LPRImage* ipImage, const VSDObjectMulti* ipObjectMulti, int iLightStatus[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult); 
 
+	// 
+	APPRESULT AddSubTitle(LPRImage* ipImage, const std::string& irString, LPRImage** opImage);
+
 private:
 	// We don't want user to copy this object
 	EventAPP(const EventAPP&);
