@@ -1,6 +1,26 @@
 #ifndef __EVENT_APP_CONSTANT_H_
 #define __EVENT_APP_CONSTANT_H_
 
+enum EventAPPFontFamily
+{
+
+	EVENT_APP_FONT_SONG		= 0,
+	EVENT_APP_FONT_HEI			= 1,
+};
+
+enum EventAPPFontOrientation
+{
+	EVENT_APP_FONT_Vertical		= 0,
+	EVENT_APP_FONT_HORIZONTAL	= 1,
+};
+
+enum EventAPPPicOrientation
+{
+	EVENT_APP_PIC_VERTICAL		= 0,
+	EVENT_APP_PIC_HORIZONTAL	= 1,
+	EVNET_APP_PIC_GRID			= 2,
+};
+
 enum EventAPPLightStatus
 {
 	EVENT_APP_LIGHT_RED			= 0,

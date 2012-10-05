@@ -31,6 +31,22 @@ struct EventRecordParam
 	wchar_t mDirPath[MAX_DIR_PATH];    // 保存视频和图像路径
 };
 
+struct EventFont 
+{
+	int mFontSize;
+	int mFontFamily;
+	COLORREF mFontColor;
+	int mFontOrientation;
+	int mFontX;
+	int mFontY;
+};
+
+struct EventImageSynthesis
+{
+	int mNumberofImage;
+	int mPicOrientation;
+};
+
 // EventAPP参数
 struct EventAPPParam
 {
@@ -40,6 +56,8 @@ struct EventAPPParam
 	VSDRatioLine mStraightLine;			// 直行标志线，越过改线后禁止左右转
 	EventRecordParam mRecordParam;		// 各种违章情况下违章录像情况
 	double mRatioToCrossLine;			// 车道压线比例阈值，超过这个阈值判定压道行驶
+	EventFont mFont;
+	EventImageSynthesis mImageSynthesis;
 };
 
 
