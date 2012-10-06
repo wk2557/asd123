@@ -33,6 +33,12 @@ enum EventAPPViedoFormat
 	EVENT_APP_VIEDO_H264		= 1,			// 合成视频的格式为H264
 };
 
+enum EventAPPRuleSwitch
+{
+	EVENT_APP_SWITCH_OFF         = 0,
+	EVENT_APP_SWITCH_ON		= 1,
+};
+
 typedef int APPRESULT;
 
 #define APP_OK						     0		// 成功
@@ -46,7 +52,7 @@ typedef int APPRESULT;
 #define APP_IMAGE_FORMAT_FAULT			-7		// 失败，原因是输入文件的格式不对
 
 
-#define RULE_TYPES						9		// 违反规则的个数，不包括VSD_BR_NONE
+#define RULE_TYPES						10		// 违反规则的个数，不包括VSD_BR_NONE
 #define MAX_FRAM_AHEAD					40		// 违规前的最大录制帧数
 #define MAX_FRAM_BHEIND					20		// 违规后的最大录制帧数
 #define DEFAULT_PLATE_MIN_WIDTH			70		// 车牌的最小宽度，供车牌识别用
@@ -54,5 +60,6 @@ typedef int APPRESULT;
 #define DEFAULT_NUMBER_PLATE			1		// 车牌的数目，供车牌识别用
 #define MAX_CHARACTOR_NUM				100     // 字幕中最大的字符数目
 #define MAX_SYNTHESIS_NUM				3		// 合成大图片的原图片最多数目
+#define DEFAULT_EXTRA_IMAGE_BUFFER			100
 
 #endif

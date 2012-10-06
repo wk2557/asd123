@@ -32,7 +32,6 @@ using namespace std;
 #ifdef __DEBUG
 #include <iostream>
 #include <string>
-#include <vector>
 #include <ctime>
 #include <algorithm>
 #define TRACE(string) std::cout << string << std::endl
@@ -190,23 +189,26 @@ static double __stdcall GetCrossRatio(const VSDRatioLine& irLine, const VSDRatio
 	return minArea * 4 / areaRect;
 }
 
+
+typedef std::map<int, int> StatusMap;
 struct PoolData
 {
-	std::map<int, int> mBreakRules;
+	StatusMap mBreakRules;
 	LPRImage* mpImage;
 };
-
-
 typedef std::deque<PoolData> ImagePool;
-typedef std::map<int, LPRImage*> VirtualLoopImagePool;
-typedef std::map<int, int> StatusMap;
+typedef std::map<int, LPRImage*> CaptureImageMap;
 typedef std::map<int, wchar_t*> PlateMap; 
 typedef std::list<EventAPPResult> ResultList;
 typedef std::map<int, VSDRect> RectMap;
+typedef std::map<int, int> RuleIndexMap;
+typedef std::map<int, int> PriorityMap;
+typedef std::map<int, int> RecordMap;
+
 
 EventAPP::EventAPP()
 {
-	mObject = new int*[16];
+	mObject = new int*[21];
 }
 
 APPRESULT EventAPP::Init(const EventAPPParam& irParam)
@@ -222,28 +224,44 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 		maxAhead = MaxT(maxAhead, irParam.mRecordParam.mBreakRuleAhead[i]);
 		maxBehind = MaxT(maxBehind, irParam.mRecordParam.mBreakRuleBehind[i]);
 	}
-	*(pValue + 3) = new int(maxAhead + maxBehind);							// EventAPP的第六个成员保存ImagePool的最大长度
-	*(pValue + 4) = (int*)new VirtualLoopImagePool;							// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
+	*(pValue + 3) = new int(maxAhead + maxBehind + DEFAULT_EXTRA_IMAGE_BUFFER);	// EventAPP的第六个成员保存ImagePool的最大长度
+	*(pValue + 4) = (int*)new CaptureImageMap;							// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
 	*(pValue + 5) = (int*)new StatusMap;									// EventAPP的第六个成员保存从跟踪开始到结束的历史breakrule状态的叠加值
-	*(pValue + 6) = (int*)new StatusMap;									// EventAPP的第七个成员保存每个物体的某个breakrule是否已经录制过视频，防止录制相同物体的相同违章
+	*(pValue + 6) = new int(maxAhead);									// EventAPP的第七个成员保存每个物体的某个breakrule是否已经录制过视频，防止录制相同物体的相同违章
 	*(pValue + 7) = (int*)new MediaConverter((EventAPPViedoFormat)irParam.mRecordParam.mViedoFormat, irParam.mRecordParam.mBitFrequent);  // EventAPP的第八个成员保存MediaConvertoer，用了录制视频
 	SubtitleOverlay* pSubTitleOverlay = &SubtitleOverlay::getInstance();
-	pSubTitleOverlay->initialize(irParam.mFont.mCharactors, irParam.mFont);
+	//pSubTitleOverlay->initialize(irParam.mFont.mCharactors, irParam.mFont);
 	*(pValue + 8) = (int*)pSubTitleOverlay;					                // EventAPP的第九个成员用来叠加字母
 	*(pValue + 9) = NULL;													// EventAPP的第十个成员用了识别车牌
 	*(pValue + 10) = (int*)new PlateMap;									// EventAPP的第十一个成员用了保存每个车的车牌号
-	*(pValue + 11) = (int*)new VirtualLoopImagePool;						// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
+	*(pValue + 11) = (int*)new CaptureImageMap;						// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
 	*(pValue + 12) = NULL;													// EventAPP的第六个成员保存图片宽度与相对宽度的比值
 	*(pValue + 13) = NULL;													// EventAPP的第七个成员保存图片高度与相对高度的比值
 	*(pValue + 14) = (int*)new ImageSynthesis;				
 	*(pValue + 15) = (int*)new RectMap;
+	RuleIndexMap* pRuleIndexMap = new RuleIndexMap;
+	*(pValue + 16) = (int*)pRuleIndexMap;
+	(*pRuleIndexMap)[VSD_BR_NONE] = 0;
+	(*pRuleIndexMap)[VSD_BR_TURN_LEFT] = 1;
+	(*pRuleIndexMap)[VSD_BR_TURN_RIGHT] = 2;
+	(*pRuleIndexMap)[VSD_BR_STRAIGHT_THROUGH] = 3;
+	(*pRuleIndexMap)[VSD_BR_CROSS_LANE] = 4;
+	(*pRuleIndexMap)[VSD_BR_REVERSE] = 5;
+	(*pRuleIndexMap)[VSD_BR_RED_LIGHT] = 6;
+	(*pRuleIndexMap)[VSD_BR_STOP] = 7;
+	(*pRuleIndexMap)[VSD_BR_HIGH_SPEED] = 8;
+	(*pRuleIndexMap)[VSD_BR_LOW_SPEED] = 9;
+	*(pValue + 17) = (int*)new PriorityMap;
+	*(pValue + 18) = (int*)new RecordMap;
+	*(pValue + 19) = (int*)new CaptureImageMap;
+	*(pValue + 20) = (int*)new CaptureImageMap;
 	return APP_OK;
 }
 
-APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjectMulti,int isRedLightOn[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult)
+APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjectMulti, const VSDObjectTrackMulti* ipObjectTrackMulti, int isRedLightOn[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult)
 {
 	opResult->mNumOfResult = 0;
-	if(!ipImage || !ipObjectMulti)
+	if(!ipImage || !ipObjectMulti || !ipObjectTrackMulti)
 	{
 #ifdef __DEBUG
 		TRACE("EventAPP::ProcessFram input fault");
@@ -273,17 +291,21 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	ImagePool* pPool = (ImagePool*)(*(pValue + 1));
 	VSDRatioLine* laneMark = (VSDRatioLine*)(*(pValue + 2));
 	int* pPoolLength =(int*)(*(pValue + 3));
-	VirtualLoopImagePool* pVirtualLoopImage = (VirtualLoopImagePool*)(*(pValue + 4));
+	CaptureImageMap* pTouchStopLineImage = (CaptureImageMap*)(*(pValue + 4));
 	StatusMap* pStatusMap = (StatusMap*)(*(pValue + 5));
-	StatusMap* pRemoveStatusMap = (StatusMap*)(*(pValue + 6));
+	int* pPoolStartCheckIndex = *(pValue + 6);	
 	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 7));
 	SubtitleOverlay* pSubtitleOverlay = (SubtitleOverlay*)(*(pValue + 8));
 	LPR* pLPR = (LPR*)(*(pValue + 9));
 	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 10));
-	VirtualLoopImagePool* pVirtualLoopLeaveImage = (VirtualLoopImagePool*)(*(pValue + 11));
-	int* pImageWidth = (int*)(*(pValue + 12));
-	int* pImageHeight = (int*)(*(pValue + 13));
+	CaptureImageMap* pLeaveStopLineImage = (CaptureImageMap*)(*(pValue + 11));
+	int* pImageWidth = *(pValue + 12);
+	int* pImageHeight = *(pValue + 13);
 	RectMap* pRectMap = (RectMap*)(*(pValue + 15));
+	RuleIndexMap* pRuleIndexMap = (RuleIndexMap*)(*(pValue + 16));
+	PriorityMap* pPriorityMap = (PriorityMap*)(*(pValue + 17));
+	CaptureImageMap* pTouchCentreLineImage = (CaptureImageMap*)(*(pValue + 19));
+	CaptureImageMap* pTouchVirtualLoopLineImage = (CaptureImageMap*)(*(pValue + 20));
 	
 
 	// 得到VSDEventParam的参数
@@ -310,8 +332,6 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		LPRReleaseImage(pDecodeImage);
 	}
 
-	// 解码JPG图片为RGB图片，供车牌识别用
-
 	// 初始化每个虚拟线圈的两个VSDRatioLine，只初始化一次
 	if(laneMark == NULL)
 	{
@@ -336,8 +356,11 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		// 因为得到的laneMark太长，我们只取虚拟线圈内的Line
 		for (int index = 0; index < lVSDParam.nVirtualLoop; ++index)
 		{
-			laneMark[2 * index].pt1 = lVSDParam.virtualLoopLine[index].pt1;
-			laneMark[2 * index + 1].pt1 = lVSDParam.virtualLoopLine[index].pt2;
+			VSDRatioPoint lTmpPoint;
+			GetCrossRatioPoint(laneMark[2 * index], pAPPParam->mStopLine,lTmpPoint);
+			laneMark[2 * index].pt1 = lTmpPoint;
+			GetCrossRatioPoint(laneMark[2 * index + 1], pAPPParam->mStopLine,lTmpPoint);
+			laneMark[2 * index + 1].pt1 = lTmpPoint;
 		}
 	}
 
@@ -403,228 +426,235 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		// objectRatioRECT 转化后的矩形
 		ToRatioRECT(lObject.rect, imageXRatio, imageYRatio, objectRatioRECT);
 		// 在virtualLoopImagePool 里保存一张图片，供没有违章的车辆用。同时在这张图片里提取每个物体的车牌号到pPlateMap中
-		if (lObject.status & VSD_OBJ_STATUS_TOUCH_LINE)
+		int lEncounterBeginY = MinT((pAPPParam->mStopLine.pt1.y + pAPPParam->mStopLine.pt2.y ) /2 + lObject.rect.height / 4, lVSDParam.nHeightBase);
+		int lEncounterEndY = MaxT((pAPPParam->mStopLine.pt1.y + pAPPParam->mStopLine.pt2.y ) /2 - lObject.rect.height / 4, 0);
+		//if (lObject.status & VSD_OBJ_STATUS_TOUCH_LINE)
+		if(objectRatioRECT.top >= lEncounterBeginY && objectRatioRECT.top <= lEncounterEndY)
 		{
-			VirtualLoopImagePool::iterator itVirtualImage = pVirtualLoopImage->find(lObject.uid);
-			PlateMap::iterator itPlateMap = pPlateMap->find(lObject.uid);
-			RectMap::iterator itRect = pRectMap->find(lObject.uid); 
-			if(itRect == pRectMap->end())
-				pRectMap->insert(make_pair(lObject.uid, lObject.rect));
-			if(itVirtualImage == pVirtualLoopImage->end())
+			if(lVSDParam.nEventType == VSDEvent_VehicleTail)
 			{
-				LPRImage *pImage = LPRCloneImage(ipImage);
-				pVirtualLoopImage->insert(make_pair(lObject.uid, pImage));
+				CaptureImageMap::iterator itVirtualImage = pTouchStopLineImage->find(lObject.uid);
+				//PlateMap::iterator itPlateMap = pPlateMap->find(lObject.uid);
+				//RectMap::iterator itRect = pRectMap->find(lObject.uid); 
+				//if(itRect == pRectMap->end())
+				//	pRectMap->insert(make_pair(lObject.uid, lObject.rect));
+				if(itVirtualImage == pTouchStopLineImage->end())
+				{
+					LPRImage *pImage = LPRCloneImage(ipImage);
+					pTouchStopLineImage->insert(make_pair(lObject.uid, pImage));
+				}
+			}
+			else
+			{
+				CaptureImageMap::iterator itVirtualImage = pLeaveStopLineImage->find(lObject.uid);
+				//PlateMap::iterator itPlateMap = pPlateMap->find(lObject.uid);
+				//RectMap::iterator itRect = pRectMap->find(lObject.uid); 
+				//if(itRect == pRectMap->end())
+				//	pRectMap->insert(make_pair(lObject.uid, lObject.rect));
+				if(itVirtualImage == pLeaveStopLineImage->end())
+				{
+					LPRImage *pImage = LPRCloneImage(ipImage);
+					pLeaveStopLineImage->insert(make_pair(lObject.uid, pImage));
+				}
 			}
 
-			if(itPlateMap == pPlateMap->end())
+//			if(itPlateMap == pPlateMap->end())
+//			{
+//				// 初始化局部参数。
+//				LPRParamLocal	localParam;
+//				// 识别区域设为当前物体的矩形框，因为物体矩形框有时比较小，没有包括车牌所在的范围，因为我们扩大搜索范围
+//				int lEnlargeWidth = lObject.rect.width / 2;
+//				int lEnlargeHeight = lObject.rect.height / 2;
+//				localParam.m_rectRegion.left = MaxT(lObject.rect.x - lEnlargeWidth, 0);
+//				localParam.m_rectRegion.right = MinT(lObject.rect.x + lObject.rect.width + lEnlargeWidth, *pImageWidth);
+//				localParam.m_rectRegion.top = MaxT(lObject.rect.y - lEnlargeHeight, 0);
+//				localParam.m_rectRegion.bottom = MinT(lObject.rect.y + lObject.rect.height + lEnlargeHeight, *pImageHeight);
+//				localParam.m_nMinPlateWidth = DEFAULT_PLATE_MIN_WIDTH; 
+//				localParam.m_nMaxPlateWidth = DEFAULT_PLATE_MAX_WIDTH;
+//				localParam.m_fltReserved0 = 0;
+//				localParam.m_fltReserved1 = 0;
+//				localParam.m_fltReserved2 = 0;
+//				localParam.m_fltReserved3 = 0;
+//
+//				// 初始化LPRParamMulti结构
+//				LPRParamMulti	multiParam;
+//				LPRParamMulti_Init( &multiParam );
+//				LPRParamMulti_Add( &multiParam, localParam );
+//
+//				// 初始化LPROutputMulti结构
+//				LPROutputMulti	multiOutput;
+//				LPROutputMulti_Init( &multiOutput );
+//
+//				// 检测识别车牌
+//				LPRImage* pDecodeImage = NULL;
+//				lResult = LPRDecodeImage(&pDecodeImage, (const unsigned char*)ipImage->pData, ipImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
+//				if(lResult != LPR_OK)
+//				{
+//#ifdef __DEBUG
+//					TRACE("EventAPP::ProcessFram Fail to decode image");
+//#endif
+//					LPRReleaseImage(pDecodeImage);
+//					return APP_FAIL;
+//				}
+//				lResult =pLPR->ProcessImage(pDecodeImage, &multiOutput, multiParam, NULL );
+//				if (lResult != LPR_OK)
+//				{
+//#ifdef __DEBUG
+//					TRACE("EventAPP::ProcessFram fail to recognize plate");
+//#endif
+//					LPRReleaseImage(pDecodeImage);
+//					return APP_FAIL;
+//				}
+//				wchar_t* pPlateCharactor = new wchar_t[LPR_PLATE_STR_LEN];
+//				if(multiOutput.m_nNumOutputs > 0)
+//				{
+//					for (int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+//					{
+//						pPlateCharactor[i] = multiOutput.m_outputs[0].wszRec[i];
+//					}
+//				}
+//				else
+//					pPlateCharactor[0] = '\0';
+//				pPlateMap->insert(make_pair(lObject.uid, pPlateCharactor));
+//				LPRReleaseImage(pDecodeImage);
+//			}
+		}
+		if(objectRatioRECT.bottom >= lEncounterBeginY && objectRatioRECT.bottom <= lEncounterEndY)
+		{
+			if(lVSDParam.nEventType == VSDEvent_VehicleHead)
 			{
-				// 初始化局部参数。
-				LPRParamLocal	localParam;
-				// 识别区域设为当前物体的矩形框，因为物体矩形框有时比较小，没有包括车牌所在的范围，因为我们扩大搜索范围
-				int lEnlargeWidth = lObject.rect.width / 2;
-				int lEnlargeHeight = lObject.rect.height / 2;
-				localParam.m_rectRegion.left = MaxT(lObject.rect.x - lEnlargeWidth, 0);
-				localParam.m_rectRegion.right = MinT(lObject.rect.x + lObject.rect.width + lEnlargeWidth, *pImageWidth);
-				localParam.m_rectRegion.top = MaxT(lObject.rect.y - lEnlargeHeight, 0);
-				localParam.m_rectRegion.bottom = MinT(lObject.rect.y + lObject.rect.height + lEnlargeHeight, *pImageHeight);
-				localParam.m_nMinPlateWidth = DEFAULT_PLATE_MIN_WIDTH; 
-				localParam.m_nMaxPlateWidth = DEFAULT_PLATE_MAX_WIDTH;
-				localParam.m_fltReserved0 = 0;
-				localParam.m_fltReserved1 = 0;
-				localParam.m_fltReserved2 = 0;
-				localParam.m_fltReserved3 = 0;
-
-				// 初始化LPRParamMulti结构
-				LPRParamMulti	multiParam;
-				LPRParamMulti_Init( &multiParam );
-				LPRParamMulti_Add( &multiParam, localParam );
-
-				// 初始化LPROutputMulti结构
-				LPROutputMulti	multiOutput;
-				LPROutputMulti_Init( &multiOutput );
-
-				// 检测识别车牌
-				LPRImage* pDecodeImage = NULL;
-				lResult = LPRDecodeImage(&pDecodeImage, (const unsigned char*)ipImage->pData, ipImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
-				if(lResult != LPR_OK)
+				CaptureImageMap::iterator itVirtualImage = pTouchStopLineImage->find(lObject.uid);
+				if(itVirtualImage == pTouchStopLineImage->end())
 				{
-#ifdef __DEBUG
-					TRACE("EventAPP::ProcessFram Fail to decode image");
-#endif
-					LPRReleaseImage(pDecodeImage);
-					return APP_FAIL;
+					LPRImage *pImage = LPRCloneImage(ipImage);
+					pTouchStopLineImage->insert(make_pair(lObject.uid, pImage));
 				}
-				lResult =pLPR->ProcessImage(pDecodeImage, &multiOutput, multiParam, NULL );
-				if (lResult != LPR_OK)
+			}
+			else
+			{
+				CaptureImageMap::iterator itVirtualImage = pLeaveStopLineImage->find(lObject.uid);
+				if(itVirtualImage == pLeaveStopLineImage->end())
 				{
-#ifdef __DEBUG
-					TRACE("EventAPP::ProcessFram fail to recognize plate");
-#endif
-					LPRReleaseImage(pDecodeImage);
-					return APP_FAIL;
+					LPRImage *pImage = LPRCloneImage(ipImage);
+					pLeaveStopLineImage->insert(make_pair(lObject.uid, pImage));
 				}
-				if(multiOutput.m_nNumOutputs > 0)
-				{
-					wchar_t* pPlateCharactor = new wchar_t[LPR_PLATE_STR_LEN];
-					for (int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-					{
-						pPlateCharactor[i] = multiOutput.m_outputs[0].wszRec[i];
-					}
-					pPlateMap->insert(make_pair(lObject.uid, pPlateCharactor));
-				}
-				LPRReleaseImage(pDecodeImage);
 			}
 		}
-		else if(lObject.status & VSD_OBJ_STATUS_LEAVE_LINE)
+		lEncounterBeginY = MinT((pAPPParam->mCentreLine.pt1.y + pAPPParam->mCentreLine.pt2.y ) /2 + lObject.rect.height / 4, lVSDParam.nHeightBase);
+		lEncounterEndY = MaxT((pAPPParam->mCentreLine.pt1.y + pAPPParam->mCentreLine.pt2.y ) /2 - lObject.rect.height / 4, 0);
+		if(objectRatioRECT.bottom >= lEncounterBeginY && objectRatioRECT.bottom <= lEncounterEndY)
 		{
-			VirtualLoopImagePool::iterator itVirtualImage = pVirtualLoopLeaveImage->find(lObject.uid);
-			if(itVirtualImage == pVirtualLoopLeaveImage->end())
+			CaptureImageMap::iterator itVirtualImage = pTouchCentreLineImage->find(lObject.uid);
+			if(itVirtualImage == pTouchCentreLineImage->end())
 			{
-				LPRImage *pImage = LPRCloneImage(ipImage);
-				pVirtualLoopLeaveImage->insert(make_pair(lObject.uid, pImage));
+				LPRImage* pImage = LPRCloneImage(ipImage);
+				pTouchCentreLineImage->insert(make_pair(lObject.uid, pImage));
 			}
 		}
+		if(lObject.status & VSD_OBJ_STATUS_TOUCH_LINE)
+		{
+			//if((pAPPParam->mStopLine.pt1.y + pAPPParam->mStopLine.pt2.y) / 2 > (lVSDParam.virtualLoopLine[lObject.nLoopID].pt1.y + lVSDParam.virtualLoopLine[lObject.nLoopID].pt2.y) /2 + (objectRatioRECT.bottom - objectRatioRECT.top) / 3)
+			//{
+			LPRImage* pImage = LPRCloneImage(ipImage);
+			CaptureImageMap::iterator itVirtualImage = pTouchVirtualLoopLineImage->find(lObject.uid);
+			if(itVirtualImage == pTouchVirtualLoopLineImage->end())
+			{
+				LPRImage* pImage = LPRCloneImage(ipImage);
+				pTouchVirtualLoopLineImage->insert(make_pair(lObject.uid, pImage));
+			}
+			//}
+		}
+		/*else if(lObject.status & VSD_OBJ_STATUS_LEAVE_LINE)
+		{
+			CaptureImageMap::iterator itVirtualImage = pLeaveStopLineImage->find(lObject.uid);
+			if(itVirtualImage == pLeaveStopLineImage->end())
+			{
+				LPRImage *pImage = LPRCloneImage(ipImage);
+				pLeaveStopLineImage->insert(make_pair(lObject.uid, pImage));
+			}
+		}*/
 		
 		int lObjectHistoryStatus = VSD_BR_NONE;
+		int lMaxPriority = (*pPriorityMap)[lObject.uid];
 		lPoolData.mBreakRules[lObject.uid] = VSD_BR_NONE;
 		// 判断是否闯红灯
-		if(isRedLightOn[lObject.nLoopID] == EVENT_APP_LIGHT_RED  && GetCrossRatio(lVSDParam.virtualLoopLine[lObject.nLoopID], objectRatioRECT) >= crossRatio)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_RED_LIGHT]] && isRedLightOn[lObject.nLoopID] == EVENT_APP_LIGHT_RED  && GetCrossRatio(pAPPParam->mStopLine, objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid  << "闯红灯，车道" << lObject.nLoopID << std::endl; 
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_RED_LIGHT;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[6]);
 		}
 		// 判断是否压车道
-		if(GetCrossRatio(laneMark[2 * lObject.nLoopID], objectRatioRECT) >= crossRatio)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_CROSS_LANE]] && GetCrossRatio(laneMark[2 * lObject.nLoopID], objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID  << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_CROSS_LANE;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[4]);
 		}
-		if(GetCrossRatio(laneMark[2 * lObject.nLoopID + 1], objectRatioRECT) >= crossRatio)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_CROSS_LANE]] && GetCrossRatio(laneMark[2 * lObject.nLoopID + 1], objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID  <<  std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_CROSS_LANE;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[4]);
 		}
 
 		// 判断是否辆违章左转
-		if(!(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_LEFT) && GetCrossRatio(pAPPParam->mleftTurnLine, objectRatioRECT) >= crossRatio)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_TURN_LEFT]] && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_LEFT) && GetCrossRatio(pAPPParam->mleftTurnLine, objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章左拐" << lObject.nLoopID << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_TURN_LEFT;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[1]);
 		}
 		
 		// 判断是否违章右转
-		if( !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_RIGHT) && GetCrossRatio(pAPPParam->mRightTurnLine, objectRatioRECT) >= crossRatio)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_TURN_RIGHT]] && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_RIGHT) && GetCrossRatio(pAPPParam->mRightTurnLine, objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章右转" << lObject.nLoopID << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_TURN_RIGHT;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[2]);
 		}
 		
 		// 判断是否违章直行
-		if(!(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(pAPPParam->mStraightLine, objectRatioRECT) >= crossRatio)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_STRAIGHT_THROUGH]] && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(pAPPParam->mStraightLine, objectRatioRECT) >= crossRatio)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章直行" << lObject.nLoopID  << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STRAIGHT_THROUGH;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[3]);
 		}
 		// 判断是否逆行
-		if(lObject.status & VSD_BR_REVERSE)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_REVERSE]] && lObject.status & VSD_BR_REVERSE)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "逆行" << lObject.nLoopID << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[5]);
 		}
 		// 判断是否违章停车
-		if(lObject.status & VSD_BR_STOP)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_STOP]] && lObject.status & VSD_BR_STOP)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章停车" << lObject.nLoopID << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STOP;
+			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[7]);
 		}
 		(*pStatusMap)[lObject.uid] |= lPoolData.mBreakRules[lObject.uid];
+		(*pPriorityMap)[lObject.uid] = lMaxPriority;
 	}
-	//ResultList lResultList;
 	int lResultCount = 0;
-	// 对比新的PoolData和原来队尾的数据，如果发现原来队尾巴的物理在新的PoolData里消失，则说明有物体离开跟踪区域，这是我们根据其历史status来判断是该物体是否有违章，
-	// 如果没有违章，则输出一张其停车线附近的图片
-	if (!pPool->empty())
-	{
-		std::map<int, int> lastObject = pPool->back().mBreakRules;
-		for(std::map<int, int>::iterator it = lastObject.begin(); it != lastObject.end(); ++it)
-		{
-			std::map<int, int> thisObject = lPoolData.mBreakRules;
-			std::map<int, int>::iterator thisIt = thisObject.find(it->first);
-
-			if(thisIt == thisObject.end())
-			{
-				VirtualLoopImagePool::iterator itImage = pVirtualLoopImage->find(it->first);
-				StatusMap::iterator itStatus = pStatusMap->find(it->first);
-				PlateMap::iterator itPlate = pPlateMap->find(it->first);
-				RectMap::iterator itRect = pRectMap->find(it->first);
-				if(itImage != pVirtualLoopImage->end())
-				{
-					if(itStatus != pStatusMap->end() && itStatus->second == VSD_BR_NONE)
-					{
-						LPRImage* lpImage = LPRCloneImage(itImage->second);
-						EventAPPResult lpResult;
-						lpResult.mBreakRule = VSD_BR_NONE;
-						lpResult.mID = it->first;
-						lpResult.mSynthesisImage[0] = lpImage;
-						lpResult.mNumOfSynthesisImage = 1;
-						if(itPlate != pPlateMap->end())
-						{
-							for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-							{
-								lpResult.mPlate[i] = itPlate->second[i];
-							}
-						}
-						else
-						{
-							lpResult.mPlate[0] = 0;
-						}
-						if (itRect != pRectMap->end())
-						{
-							lpResult.mRect = itRect->second;
-						}
-						else
-						{
-							lpResult.mRect.height = 0;
-							lpResult.mRect.width  = 0;
-							lpResult.mRect.x = 0;
-							lpResult.mRect.y = 0;
-						}
-						//lResultList.push_back(lpResult);
-						opResult->mppAPPResult[lResultCount++] = lpResult;
-						opResult->mNumOfResult = lResultCount;
-						lNoBreakRuleLog << "车" << lpResult.mID << endl;
-					}
-					//LPRReleaseImage(itImage->second);
-					//pVirtualLoopImage->erase(itImage);
-				}
-				if(itStatus != pStatusMap->end())
-					pStatusMap->erase(itStatus);
-				/*
-				if(itPlate != pPlateMap->end())
-				{
-					delete[] itPlate->second;
-					pPlateMap->erase(itPlate);
-				}
-				*/
-			}
-		}
-	}
 
 	// 把当前PoolData压入队尾
 	pPool->push_back(lPoolData);
@@ -635,471 +665,22 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		LPRReleaseImage(lCheckPoolData.mpImage);
 		pPool->pop_front();
 		// 查看中间数据的违章情况
-		int middle = (*pPoolLength + 1)/2;
-		lCheckPoolData = pPool->at(middle);
+		lCheckPoolData = pPool->at(*pPoolStartCheckIndex);
 		// 遍历当前poolData中的所有object的违章记录
 		for(std::map<int, int>::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
 		{
-			// itObjects所指向的车辆是否违章左转
-			if(itObject->second & VSD_BR_TURN_LEFT)
-			{
-				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_TURN_LEFT))
-				{
-					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_TURN_LEFT;
-					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[0];
-					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
-					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[0];
-					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
-					int lSizeToCopy = lEndIndex - lBeginIndex;
-					int lImageCount = 0;
-					EventAPPResult lpAPPResult;
-					lpAPPResult.mID = itObject->first;
-					lpAPPResult.mBreakRule = VSD_BR_TURN_LEFT;
-					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
-					if(itPlate != pPlateMap->end())
-					{
-						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-						{
-							lpAPPResult.mPlate[i] = itPlate->second[i];
-						}
-					}
-					else
-						lpAPPResult.mPlate[0] = 0;
-
-					RectMap::iterator itRect = pRectMap->find(itObject->first);
-					if (itRect != pRectMap->end())
-					{
-						lpAPPResult.mRect = itRect->second;
-					}
-					else
-					{
-						lpAPPResult.mRect.height = 0;
-						lpAPPResult.mRect.width  = 0;
-						lpAPPResult.mRect.x = 0;
-						lpAPPResult.mRect.y = 0;
-					}
-					LPRImage *lpImage = NULL;
-					for (int j = 0; j < lSizeToCopy; ++j)
-					{
-						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
-						lpAPPResult.mViedoImage[j] = lpImage;
-						lpAPPResult.mNumOfViedoImage = lSizeToCopy;
-					}
-					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-
-					}
-					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					}
-					lpImage = LPRCloneImage(lCheckPoolData.mpImage);
-					lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					lpAPPResult.mNumOfSynthesisImage = lImageCount;
-					//lResultList.push_back(lpAPPResult);
-					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
-					opResult->mNumOfResult = lResultCount;
-					lBreakOutputLog << "车" <<lpAPPResult.mID << "违反左转" <<endl;
-				}
-			}
-			if(itObject->second & VSD_BR_TURN_RIGHT)
-			{
-				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_TURN_RIGHT))
-				{
-					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_TURN_RIGHT;
-					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[1];
-					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
-					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[1];
-					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
-					int lSizeToCopy = lEndIndex - lBeginIndex;
-					int lImageCount = 0;
-					EventAPPResult lpAPPResult;
-					lpAPPResult.mID = itObject->first;
-					lpAPPResult.mBreakRule = VSD_BR_TURN_RIGHT;
-					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
-					if(itPlate != pPlateMap->end())
-					{
-						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-						{
-							lpAPPResult.mPlate[i] = itPlate->second[i];
-						}
-					}
-					else
-						lpAPPResult.mPlate[0] = 0;
-					RectMap::iterator itRect = pRectMap->find(itObject->first);
-					if (itRect != pRectMap->end())
-					{
-						lpAPPResult.mRect = itRect->second;
-					}
-					else
-					{
-						lpAPPResult.mRect.height = 0;
-						lpAPPResult.mRect.width  = 0;
-						lpAPPResult.mRect.x = 0;
-						lpAPPResult.mRect.y = 0;
-					}
-					LPRImage *lpImage = NULL;
-					for (int j = 0; j < lSizeToCopy; ++j)
-					{
-						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
-						lpAPPResult.mViedoImage[j] = lpImage;
-						lpAPPResult.mNumOfViedoImage = lSizeToCopy;
-					}
-					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-
-					}
-					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					}
-					lpImage = LPRCloneImage(lCheckPoolData.mpImage);
-					lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					lpAPPResult.mNumOfSynthesisImage = lImageCount;
-					//lResultList.push_back(lpAPPResult);
-					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
-					opResult->mNumOfResult = lResultCount;
-					lBreakOutputLog << "车" <<lpAPPResult.mID << "违反右转" <<endl;
-				}
-			}
-			if(itObject->second & VSD_BR_STRAIGHT_THROUGH)
-			{
-				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_STRAIGHT_THROUGH))
-				{
-					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_STRAIGHT_THROUGH;
-					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[2];
-					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
-					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[2];
-					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
-					int lSizeToCopy = lEndIndex - lBeginIndex;
-					int lImageCount = 0;
-					EventAPPResult lpAPPResult;
-					lpAPPResult.mID = itObject->first;
-					lpAPPResult.mBreakRule = VSD_BR_STRAIGHT_THROUGH;
-					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
-					if(itPlate != pPlateMap->end())
-					{
-						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-						{
-							lpAPPResult.mPlate[i] = itPlate->second[i];
-						}
-					}
-					else
-						lpAPPResult.mPlate[0] = 0;
-					RectMap::iterator itRect = pRectMap->find(itObject->first);
-					if (itRect != pRectMap->end())
-					{
-						lpAPPResult.mRect = itRect->second;
-					}
-					else
-					{
-						lpAPPResult.mRect.height = 0;
-						lpAPPResult.mRect.width  = 0;
-						lpAPPResult.mRect.x = 0;
-						lpAPPResult.mRect.y = 0;
-					}
-					LPRImage *lpImage = NULL;
-					for (int j = 0; j < lSizeToCopy; ++j)
-					{
-						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
-						lpAPPResult.mViedoImage[j] = lpImage;
-						lpAPPResult.mNumOfViedoImage = lSizeToCopy;
-					}
-					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-
-					}
-					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					}
-					lpImage = LPRCloneImage(lCheckPoolData.mpImage);
-					lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					lpAPPResult.mNumOfSynthesisImage = lImageCount;
-					//lResultList.push_back(lpAPPResult);
-					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
-					opResult->mNumOfResult = lResultCount;
-					lBreakOutputLog << "车" <<lpAPPResult.mID << "违反直行" <<endl;
-				}
-			}
-			if(itObject->second & VSD_BR_CROSS_LANE)
-			{
-				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_CROSS_LANE))
-				{
-					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_CROSS_LANE;
-					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[3];
-					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
-					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[3];
-					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
-					int lSizeToCopy = lEndIndex - lBeginIndex;
-					int lImageCount = 0;
-					EventAPPResult lpAPPResult; 
-					lpAPPResult.mID = itObject->first; 
-					lpAPPResult.mBreakRule = VSD_BR_CROSS_LANE;
-					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
-					if(itPlate != pPlateMap->end())
-					{
-						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-						{
-							lpAPPResult.mPlate[i] = itPlate->second[i];
-						}
-					}
-					else
-						lpAPPResult.mPlate[0] = 0;
-					RectMap::iterator itRect = pRectMap->find(itObject->first);
-					if (itRect != pRectMap->end())
-					{
-						lpAPPResult.mRect = itRect->second;
-					}
-					else
-					{
-						lpAPPResult.mRect.height = 0;
-						lpAPPResult.mRect.width  = 0;
-						lpAPPResult.mRect.x = 0;
-						lpAPPResult.mRect.y = 0;
-					}
-					LPRImage *lpImage = NULL;
-					for (int j = 0; j < lSizeToCopy; ++j)
-					{
-						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
-						lpAPPResult.mViedoImage[j] = lpImage;
-						lpAPPResult.mNumOfViedoImage = lSizeToCopy;
-					}
-					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-
-					}
-					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					}
-					lpImage = LPRCloneImage(lCheckPoolData.mpImage);
-					lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					lpAPPResult.mNumOfSynthesisImage = lImageCount;
-					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
-					opResult->mNumOfResult = lResultCount;
-					//lResultList.push_back(lpAPPResult);
-					lBreakOutputLog << "车" <<lpAPPResult.mID << "违反压线" <<endl;
-				}
-			}
-			if(itObject->second & VSD_BR_REVERSE)
-			{
-				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_REVERSE))
-				{
-					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_REVERSE;
-					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[4];
-					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
-					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[4];
-					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
-					int lSizeToCopy = lEndIndex - lBeginIndex;
-					int lImageCount = 0;
-					EventAPPResult lpAPPResult;
-					lpAPPResult.mID = itObject->first;
-					lpAPPResult.mBreakRule = VSD_BR_REVERSE;
-					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
-					if(itPlate != pPlateMap->end())
-					{
-						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-						{
-							lpAPPResult.mPlate[i] = itPlate->second[i];
-						}
-					}
-					else
-						lpAPPResult.mPlate[0] = 0;
-					RectMap::iterator itRect = pRectMap->find(itObject->first);
-					if (itRect != pRectMap->end())
-					{
-						lpAPPResult.mRect = itRect->second;
-					}
-					else
-					{
-						lpAPPResult.mRect.height = 0;
-						lpAPPResult.mRect.width  = 0;
-						lpAPPResult.mRect.x = 0;
-						lpAPPResult.mRect.y = 0;
-					}
-					LPRImage *lpImage = NULL;
-					for (int j = 0; j < lSizeToCopy; ++j)
-					{
-						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
-						lpAPPResult.mViedoImage[j] = lpImage;
-						lpAPPResult.mNumOfViedoImage = lSizeToCopy;
-					}
-					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-
-					}
-					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					}
-					lpImage = LPRCloneImage(lCheckPoolData.mpImage);
-					lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					lpAPPResult.mNumOfSynthesisImage = lImageCount;
-					//lResultList.push_back(lpAPPResult);
-					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
-					opResult->mNumOfResult = lResultCount;
-					lBreakOutputLog << "车" <<lpAPPResult.mID << "违反逆行" <<endl;
-				}
-			}
-			if(itObject->second & VSD_BR_RED_LIGHT)
-			{
-				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_RED_LIGHT))
-				{
-					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_RED_LIGHT;
-					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[5];
-					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
-					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[5];
-					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
-					int lSizeToCopy = lEndIndex - lBeginIndex;
-					int lImageCount = 0;
-					EventAPPResult lpAPPResult;
-					lpAPPResult.mID = itObject->first;
-					lpAPPResult.mBreakRule = VSD_BR_RED_LIGHT;
-					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
-					if(itPlate != pPlateMap->end())
-					{
-						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-						{
-							lpAPPResult.mPlate[i] = itPlate->second[i];
-						}
-					}
-					else
-						lpAPPResult.mPlate[0] = 0;
-					RectMap::iterator itRect = pRectMap->find(itObject->first);
-					if (itRect != pRectMap->end())
-					{
-						lpAPPResult.mRect = itRect->second;
-					}
-					else
-					{
-						lpAPPResult.mRect.height = 0;
-						lpAPPResult.mRect.width  = 0;
-						lpAPPResult.mRect.x = 0;
-						lpAPPResult.mRect.y = 0;
-					}
-					LPRImage *lpImage = NULL;
-					for (int j = 0; j < lSizeToCopy; ++j)
-					{
-						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
-						lpAPPResult.mViedoImage[j] = lpImage;
-						lpAPPResult.mNumOfViedoImage = lSizeToCopy;
-					}
-					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-
-					}
-					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					}
-					lpImage = LPRCloneImage(lCheckPoolData.mpImage);
-					lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					lpAPPResult.mNumOfSynthesisImage = lImageCount;
-					//lResultList.push_back(lpAPPResult);
-					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
-					opResult->mNumOfResult = lResultCount;
-					lBreakOutputLog << "车" <<lpAPPResult.mID << "违反红灯" <<endl;
-				}
-			}
-			if(itObject->second & VSD_BR_STOP)
-			{
-				if(!((*pRemoveStatusMap)[itObject->first] & VSD_BR_STOP))
-				{
-					(*pRemoveStatusMap)[itObject->first] |= VSD_BR_STOP;
-					int lBeginIndex = middle - pAPPParam->mRecordParam.mBreakRuleAhead[6];
-					lBeginIndex = lBeginIndex > 0 ? lBeginIndex : 0;
-					int lEndIndex = middle + pAPPParam->mRecordParam.mBreakRuleBehind[6];
-					lEndIndex = lEndIndex > 0 ? lEndIndex : pPool->size();
-					int lSizeToCopy = lEndIndex - lBeginIndex;
-					int lImageCount = 0;
-					EventAPPResult lpAPPResult;
-					lpAPPResult.mID = itObject->first;
-					lpAPPResult.mBreakRule = VSD_BR_STOP;
-					PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
-					if(itPlate != pPlateMap->end())
-					{
-						for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-						{
-							lpAPPResult.mPlate[i] = itPlate->second[i];
-						}
-					}
-					else
-						lpAPPResult.mPlate[0] = 0;
-					RectMap::iterator itRect = pRectMap->find(itObject->first);
-					if (itRect != pRectMap->end())
-					{
-						lpAPPResult.mRect = itRect->second;
-					}
-					else
-					{
-						lpAPPResult.mRect.height = 0;
-						lpAPPResult.mRect.width  = 0;
-						lpAPPResult.mRect.x = 0;
-						lpAPPResult.mRect.y = 0;
-					}
-					LPRImage *lpImage = NULL;
-					for (int j = 0; j < lSizeToCopy; ++j)
-					{
-						lpImage = LPRCloneImage(pPool->at(j + lBeginIndex).mpImage);
-						lpAPPResult.mViedoImage[j] = lpImage;
-						lpAPPResult.mNumOfViedoImage = lSizeToCopy;
-					}
-					VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-
-					}
-					itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-					if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
-					{
-						lpImage = LPRCloneImage(itVirtualLoopImage->second);
-						lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					}
-					lpImage = LPRCloneImage(lCheckPoolData.mpImage);
-					lpAPPResult.mSynthesisImage[lImageCount++] = lpImage;
-					lpAPPResult.mNumOfSynthesisImage = lImageCount;
-					//lResultList.push_back(lpAPPResult);
-					opResult->mppAPPResult[lResultCount++] = lpAPPResult;
-					opResult->mNumOfResult = lResultCount;
-					lBreakOutputLog << "车" <<lpAPPResult.mID << "违章停车" <<endl;
-				}
-			}
+			ConstructResult(itObject->second, VSD_BR_NONE, itObject->first, opResult, lResultCount);
+			ConstructResult(itObject->second, VSD_BR_TURN_LEFT, itObject->first, opResult, lResultCount);
+			ConstructResult(itObject->second, VSD_BR_TURN_RIGHT, itObject->first, opResult, lResultCount);
+			ConstructResult(itObject->second, VSD_BR_STRAIGHT_THROUGH, itObject->first, opResult, lResultCount);
+			ConstructResult(itObject->second, VSD_BR_CROSS_LANE, itObject->first, opResult, lResultCount);
+			ConstructResult(itObject->second, VSD_BR_REVERSE, itObject->first, opResult, lResultCount);
+			ConstructResult(itObject->second, VSD_BR_RED_LIGHT, itObject->first, opResult, lResultCount);
+			ConstructResult(itObject->second, VSD_BR_STOP, itObject->first, opResult, lResultCount);
+			
 			// 清除pRemoveStatsu里不需要的记录
 			int lShowUp = 0;
-			for(int i = middle + 1; i < pPool->size(); ++i)
+			for(int i = *pPoolStartCheckIndex + 1; i < pPool->size(); ++i)
 			{
 				PoolData lTmpPoolData = pPool->at(i);
 				if(lTmpPoolData.mBreakRules.find(itObject->first) != lTmpPoolData.mBreakRules.end())
@@ -1110,9 +691,12 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 			}
 			if(0 == lShowUp)
 			{
-				StatusMap::iterator itStatusMap = pRemoveStatusMap->find(itObject->first);
-				if(itStatusMap != pRemoveStatusMap->end())
-					pRemoveStatusMap->erase(itStatusMap);
+				StatusMap::iterator itStatusMap = pStatusMap->find(itObject->first);
+				if(itStatusMap != pStatusMap->end())
+					pStatusMap->erase(itStatusMap);
+				//PriorityMap::iterator itPirorityMap = pPriorityMap->find(itObject->first);
+				//if (itPirorityMap != pPriorityMap->end())
+				//	pPriorityMap->erase(itPirorityMap);
 				PlateMap::iterator itPlate = pPlateMap->find(itObject->first);
 				if(itPlate != pPlateMap->end())
 				{
@@ -1120,18 +704,18 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 					pPlateMap->erase(itPlate);
 				}
 
-				VirtualLoopImagePool::iterator itVirtualLoopImage = pVirtualLoopImage->find(itObject->first);
-				if (itVirtualLoopImage != pVirtualLoopImage->end())
+				CaptureImageMap::iterator itVirtualLoopImage = pTouchStopLineImage->find(itObject->first);
+				if (itVirtualLoopImage != pTouchStopLineImage->end())
 				{
 					LPRReleaseImage(itVirtualLoopImage->second);
-					pVirtualLoopImage->erase(itVirtualLoopImage);
+					pTouchStopLineImage->erase(itVirtualLoopImage);
 				}
 
-				itVirtualLoopImage = pVirtualLoopLeaveImage->find(itObject->first);
-				if(itVirtualLoopImage != pVirtualLoopLeaveImage->end())
+				itVirtualLoopImage = pLeaveStopLineImage->find(itObject->first);
+				if(itVirtualLoopImage != pLeaveStopLineImage->end())
 				{
 					LPRReleaseImage(itVirtualLoopImage->second);
-					pVirtualLoopLeaveImage->erase(itVirtualLoopImage);
+					pLeaveStopLineImage->erase(itVirtualLoopImage);
 				}
 			}
 		}
@@ -1176,6 +760,95 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	return APP_OK;
 }
 
+APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid, EventMultiAPPResult* opResultMulti, int& orResultCount)
+{
+	// 得到EventAPP成员指针
+	int** pValue = (int**)mObject;
+	EventAPPParam* pAPPParam = (EventAPPParam*)(*pValue);
+	ImagePool* pPool = (ImagePool*)(*(pValue + 1));
+	int* pPoolLength =(int*)(*(pValue + 3));
+	CaptureImageMap* pTouchStopLineImage = (CaptureImageMap*)(*(pValue + 4));
+	StatusMap* pStatusMap = (StatusMap*)(*(pValue + 5));
+	int* pPoolStartCheckIndex = *(pValue + 6);	
+	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 10));
+	CaptureImageMap* pLeaveStopLineImage = (CaptureImageMap*)(*(pValue + 11));
+	RectMap* pRectMap = (RectMap*)(*(pValue + 15));
+	RuleIndexMap* pRuleIndexMap = (RuleIndexMap*)(*(pValue + 16));
+	PriorityMap* pPriorityMap = (PriorityMap*)(*(pValue + 17)); 
+	RecordMap* pRecordMap = (RecordMap*)(*(pValue + 18));
+
+
+	// objects是否有违规情况，并且是否要录制iRuleType
+	if((iObjectBreakRule == iRuleType) && (pAPPParam->mRuleSwitch[(*pRuleIndexMap)[iRuleType]]))
+	{
+		// 如果有优先级更高的breakrule（包括相同的breakrule），我们简单的返回
+		if(pRecordMap->find(uid) != pRecordMap->end() || ((pAPPParam->mRulePriority)[(*pRuleIndexMap)[iRuleType]]) < (*pPriorityMap)[uid] || (iRuleType == VSD_BR_NONE && (*pStatusMap)[uid] != VSD_BR_NONE))
+			return APP_OK;
+		// 如果没有优先级更高的breakrule，我们构建EventAPPResult
+		(*pRecordMap)[uid] = 1;
+		EventAPPResult lAPPResult;
+		lAPPResult.mID = uid;
+		lAPPResult.mBreakRule = iRuleType;
+		// 填充EventAPPResult的车牌信息
+		PlateMap::iterator itPlate = pPlateMap->find(uid);
+		if (itPlate != pPlateMap->end())
+		{
+			for(int i = 0; i < LPR_PLATE_STR_LEN; ++i)
+				lAPPResult.mPlate[i] = itPlate->second[i];
+		}
+		else
+			lAPPResult.mPlate[0] = '\0';
+		// 填充EventAPPResult的车的位置矩形信息
+		RectMap::iterator itRect = pRectMap->find(uid);
+		if(itRect != pRectMap->end())
+				lAPPResult.mRect = itRect->second;
+		else
+		{
+			lAPPResult.mRect.height = 0;
+			lAPPResult.mRect.width  = 0;
+			lAPPResult.mRect.x = 0;
+			lAPPResult.mRect.y = 0;
+		}
+		// 填充EventAPPResult的mViedoImage信息
+		int lBeginIndex = MaxT(*pPoolStartCheckIndex - pAPPParam->mRecordParam.mBreakRuleAhead[(*pRuleIndexMap)[iRuleType]], 0);
+		int lEndIndex = MinT(*pPoolStartCheckIndex + pAPPParam->mRecordParam.mBreakRuleBehind[(*pRuleIndexMap)[iRuleType]], *pPoolLength - 1);
+		int lSizeToCopy = lEndIndex - lBeginIndex + 1;
+		LPRImage* lpImage = NULL;
+		for (int i = 0; i < lSizeToCopy; ++i )
+		{
+			lpImage = LPRCloneImage(pPool->at(i + lBeginIndex).mpImage);
+			lAPPResult.mViedoImage[i] = lpImage;
+		}
+		lAPPResult.mNumOfViedoImage = lSizeToCopy;
+		// 填充EventAPPResult的mSynthesisImage信息
+		int lSynthesisNum = 0;
+		CaptureImageMap::iterator itVirtualLoopTouch = pTouchStopLineImage->find(uid);
+		if(itVirtualLoopTouch != pTouchStopLineImage->end())
+		{
+			lpImage = LPRCloneImage(itVirtualLoopTouch->second);
+			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+		}
+		CaptureImageMap::iterator itVirtualLoopLeave = pLeaveStopLineImage->find(uid);
+		if(itVirtualLoopLeave != pLeaveStopLineImage->end())
+		{
+			lpImage = LPRCloneImage(itVirtualLoopLeave->second);
+			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+		}
+		if(iRuleType == VSD_BR_RED_LIGHT)
+			lpImage = LPRCloneImage(lAPPResult.mViedoImage[lSizeToCopy - 1]);
+		else
+			lpImage = LPRCloneImage(pPool->at(*pPoolStartCheckIndex).mpImage);
+		lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+		lAPPResult.mNumOfSynthesisImage = lSynthesisNum;
+		// 构造好EventAPPResult后把他插入到opResultMulti中
+		opResultMulti->mppAPPResult[orResultCount++] = lAPPResult;
+		opResultMulti->mNumOfResult = orResultCount;
+#ifdef __DEBUG
+		lBreakOutputLog << "车" << lAPPResult.mID << "，车牌" << lAPPResult.mPlate << "，违反规则" << iRuleType << endl;
+#endif
+	}
+}
+
 EventAPP::~EventAPP()
 {
 	int** pValue = (int**)mObject;
@@ -1183,13 +856,13 @@ EventAPP::~EventAPP()
 	ImagePool* pPool = (ImagePool*)(*(pValue + 1));
 	VSDRatioLine* laneMark = (VSDRatioLine*)(*(pValue + 2));
 	int* pPoolLength =(int*)(*(pValue + 3));
-	VirtualLoopImagePool* pVirtualLoopImage = (VirtualLoopImagePool*)(*(pValue + 4));
+	CaptureImageMap* pTouchStopLineImage = (CaptureImageMap*)(*(pValue + 4));
 	StatusMap* pStatusMap = (StatusMap*)(*(pValue + 5));
 	StatusMap* pRemoveStatusMap = (StatusMap*)(*(pValue + 6));
 	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 7));
 	LPR* pLPR = (LPR*)(*(pValue + 9));
 	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 10));
-	VirtualLoopImagePool* pVirtualLoopLeaveImage = (VirtualLoopImagePool*)(*(pValue + 11));
+	CaptureImageMap* pLeaveStopLineImage = (CaptureImageMap*)(*(pValue + 11));
 	int* pImageWidth = (int*)(*(pValue + 12));
 	int* pImageHeight = (int*)(*(pValue + 13));
 	ImageSynthesis* pImageSynthesis = (ImageSynthesis*)(*(pValue + 14));
@@ -1209,13 +882,13 @@ EventAPP::~EventAPP()
 
 	delete pPoolLength;
 
-	for(VirtualLoopImagePool::iterator it = pVirtualLoopImage->begin(); it != pVirtualLoopImage->end(); ++it)
+	for(CaptureImageMap::iterator it = pTouchStopLineImage->begin(); it != pTouchStopLineImage->end(); ++it)
 		LPRReleaseImage(it->second);
-	delete pVirtualLoopImage;
+	delete pTouchStopLineImage;
 
-	for(VirtualLoopImagePool::iterator it = pVirtualLoopLeaveImage->begin(); it != pVirtualLoopLeaveImage->end(); ++it)
+	for(CaptureImageMap::iterator it = pLeaveStopLineImage->begin(); it != pLeaveStopLineImage->end(); ++it)
 		LPRReleaseImage(it->second);
-	delete pVirtualLoopLeaveImage;
+	delete pLeaveStopLineImage;
 
 	delete pStatusMap;
 
@@ -1445,27 +1118,6 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 		ipEventParam->mVSDParam = lVSDEventParam;
 	}
 
-	it = keyValue.find("Charactors");
-	if(it == keyValue.end())
-	{
-#ifdef __DEBUG
-		TRACE("EventAPP_LoadParam 输入参数文件格式有误");
-#endif
-		return APP_CONFIG_PARAM_FAULT;
-	}
-	else
-	{
-		if(it->second.size() > MAX_CHARACTOR_NUM)
-		{
-#ifdef __DEBUG
-			TRACE("EventAPP_LoadParam 输入参数文件格式有误");
-#endif
-			return APP_CONFIG_PARAM_FAULT;
-		}
-		str2wstr(ipEventParam->mFont.mCharactors, it->second.c_str(), it->second.size());
-		//ipEventParam->mFont.mCharactors[it->second.size() + 1] = L'\0';
-	}
-	
 	// 初始化左转线p1点的x坐标
 	APPRESULT lAPPResult = CheckAndSetValue(keyValue, "TurnLeft.pt1.x", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mleftTurnLine.pt1.x);
 	if (lAPPResult != APP_OK)
@@ -1517,80 +1169,136 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
+	
+	lAPPResult = CheckAndSetValue(keyValue, "StopLine.pt1.x", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mStopLine.pt1.x);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "StopLine.pt1.y", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mStopLine.pt1.y);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "StopLine.pt2.x", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mStopLine.pt2.x);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "StopLine.pt2.y", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mStopLine.pt2.y);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	
+	lAPPResult = CheckAndSetValue(keyValue, "CentreLine.pt1.x", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mCentreLine.pt1.x);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "CentreLine.pt1.y", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mCentreLine.pt1.y);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "CentreLine.pt2.x", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mCentreLine.pt2.x);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "CentreLine.pt2.y", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mCentreLine.pt2.y);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	
+	lAPPResult = CheckAndSetValue(keyValue, "StopForbidRect.left", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mStopForbidRect.left);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "StopForbidRect.top", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mStopForbidRect.top);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "StopForbidRect.right", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mStopForbidRect.right);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "StopForbidRect.bottom", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mStopForbidRect.bottom);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
 	// 初始化压线阈值
 	lAPPResult = CheckAndSetValue(keyValue, "CrossRatio", 0.0, 1.0, ipEventParam->mRatioToCrossLine);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
 	// 初始化各种rule的录制帧范围
-	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnLeftFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[0]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordBreakNoneFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[0]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnLeftFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[0]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordBreakNoneFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[0]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
+	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnLeftFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[1]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnLeftFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[1]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
 	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnRightFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[1]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnRightFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[2]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnRightFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[1]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-
-	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordStraightFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[2]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordStraightFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[2]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnRightFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[2]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
 	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordCrossLineFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[3]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordStraightFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[3]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordCrossLineFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[3]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-
-	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordReverseFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[4]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordReverseFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[4]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordStraightFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[3]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
 	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordRedLightFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[5]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordCrossLineFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[4]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordRedLightFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[5]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-
-	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordStopFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[6]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordStopFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[6]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordCrossLineFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[4]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
 	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordHighSpeedFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[7]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordReverseFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[5]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordHighSpeedFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[7]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordReverseFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[5]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
 	//
-	lAPPResult = CheckAndSetValue(keyValue, "RecordLowSpeedFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[8]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordRedLightFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[6]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordLowSpeedFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[8]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordRedLightFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[6]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "RecordStopFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[7]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RecordStopFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[7]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "RecordHighSpeedFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[8]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RecordHighSpeedFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[8]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
+	//
+	lAPPResult = CheckAndSetValue(keyValue, "RecordLowSpeedFramAhead", 0, MAX_FRAM_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[9]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RecordLowSpeedFramBehind", 0, MAX_FRAM_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[9]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 	
@@ -1606,25 +1314,17 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
-	lAPPResult = CheckAndSetValue(keyValue, "FontFamily", 0, 2, ipEventParam->mFont.mFontFamily);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-
-	int RGB_R;
-	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_R", 0, 256, RGB_R); 
+	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_R", 0, 256, ipEventParam->mFont.mFontRGB_R); 
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 	
-	int RGB_G;
-	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_G", 0, 256, RGB_G); 
+	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_R", 0, 256, ipEventParam->mFont.mFontRGB_R); 
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 	
-	int RGB_B;
-	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_B", 0, 256, RGB_B); 
+	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_R", 0, 256, ipEventParam->mFont.mFontRGB_R); 
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	ipEventParam->mFont.mFontColor = RGB(RGB_R, RGB_G, RGB_B);
 
 
 	lAPPResult = CheckAndSetValue(keyValue, "FontOrientation", 0, 2, ipEventParam->mFont.mFontOrientation);
@@ -1650,6 +1350,69 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisZoon", 0.0, 1.0, ipEventParam->mImageSynthesis.mZoonRatio);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
+
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakNoneSwitch", 0, 1, ipEventParam->mRuleSwitch[0]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakTurnLeftSwitch", 0, 1, ipEventParam->mRuleSwitch[1]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakTurnRightSwitch", 0, 1, ipEventParam->mRuleSwitch[2]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakStraightSwitch", 0, 1, ipEventParam->mRuleSwitch[3]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakCrossSwitch", 0, 1, ipEventParam->mRuleSwitch[4]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakReverseSwitch", 0, 1, ipEventParam->mRuleSwitch[5]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakRedLightSwitch", 0, 1, ipEventParam->mRuleSwitch[6]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakStopSwitch", 0, 1, ipEventParam->mRuleSwitch[7]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakHighSpeedSwitch", 0, 1, ipEventParam->mRuleSwitch[8]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakLowSpeedSwitch", 0, 1, ipEventParam->mRuleSwitch[9]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakNonePriority", 0, 9, ipEventParam->mRulePriority[0]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakTurnLeftPriority", 0, 9, ipEventParam->mRulePriority[1]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakTurnRightPriority", 0, 9, ipEventParam->mRulePriority[2]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakStraightPriority", 0, 9, ipEventParam->mRulePriority[3]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakCrossPriority", 0, 9, ipEventParam->mRulePriority[4]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakReversePriority", 0, 9, ipEventParam->mRulePriority[5]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakRedLightPriority", 0, 9, ipEventParam->mRulePriority[6]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakStopPriority", 0, 9, ipEventParam->mRulePriority[7]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakHighSpeedPriority", 0, 9, ipEventParam->mRulePriority[8]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakLowSpeedPriority", 0, 9, ipEventParam->mRulePriority[9]);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
 	return APP_OK;
 }
 
@@ -1752,8 +1515,13 @@ int main(int argc, char *argv[])
 		EventMultiAPPResult lAPPResult;
 		VSDObjectMulti lObjectMulti;
 		LPRRESULT lResult = lEvent.ProcessFrame(&imgJPG, &lObjectMulti);
+		VSDObjectTrackMulti lObjectTrackMulti;
+		VSDObjectTrackMulti_Init(&lObjectTrackMulti);
 		int lLights[MAX_VIRTUAL_LOOPS] = {0, 0, 0, 0};
-		lEventApp.ProcessFram(&imgJPG,&lObjectMulti, lLights, &lAPPResult);
+		lResult = lEvent.GetAllTracks(&lObjectTrackMulti);
+		lEventApp.ProcessFram(&imgJPG,&lObjectMulti, &lObjectTrackMulti, lLights, &lAPPResult);
+
+
 		delete[] pJpgBuf;
 		FreeMultiAPPResult(&lAPPResult);
 	}
