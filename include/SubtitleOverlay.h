@@ -9,43 +9,55 @@
 using std::map;
 using std::string;
 
-bool LPRCopySubImageToLarge(const LPRImage* pImSub, LPRImage* pImLarge, RECT rect);
-bool LPROverlay(LPRImage* pImForeground, LPRImage* pImBackGround, int x, int y);
-
-class SubtitleOverlay
+struct EventSubtitleImages
 {
-public:
-	virtual ~SubtitleOverlay(void);
-	static SubtitleOverlay& getInstance();
-	/**
-	 * 将指定字库中的字按照给定的参数生成图片，并缓存。为了效率起见，
-	 * 请确保字库中的字已经覆盖了以后将要用到的所有字。
-	 *
-	 * param str - 字库
-	 * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
-	 */
-	void initialize(const wchar_t *wstr, const EventFont &fontParam);
-	/**
-	 * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
-	 *
-	 * param pRawImage - 以JPG格式编码过的图像（目前仅支持JPG码流输入）
-	 * param subtitle - 字幕内容
-	 * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
-	 *
-	 * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
-	 */
-	LPRImage* overlaySubtitle(LPRImage *pRawImage, const wchar_t* subtitle, const EventFont &fontParam);
-private:
-	SubtitleOverlay(void) {}
-	SubtitleOverlay(const SubtitleOverlay &other) {}
-	SubtitleOverlay& operator=(const SubtitleOverlay &other) { return *this; }
-	bool bitmapToLPRImage(HDC hdc, HBITMAP hbm, LPRImage **pImagePtr);
-	LPRImage* characterImage(wchar_t ch);
-private:
-	map<wchar_t, LPRImage*> mCharImageMap;	// 字符到图片的映射
-
-	// 字幕参数
-	EventFont mFontParam;
+	LPRImage ***mImages;	// 字体家族优先的二维LPRImage*数组，mImages[i][j]表示字体家族为mFontFamilys[i]，字符为mSubtitle[j]的图片
+	int *mFontFamilys;		// 所有的字体家族
+	int mFontFamilysCount; // 字体家族个数
+	wchar_t *mSubtitle;		// 字体库
 };
+
+/**
+ * 将pImSub图像复制到pImLarge图像的rect区域。
+ */
+bool __stdcall LPRCopySubImageToLarge(const LPRImage* pImSub, LPRImage* pImLarge, const RECT &rect);
+/**
+ * 将pImLarge图像的rect区域拷贝到pImSub图像。
+ */
+bool __stdcall LPRCopyLargeRegionToSub(const LPRImage *pImLarge, LPRImage *pImSub, const RECT &rect);
+/**
+ * 将pImForeground图像叠加到pImBackGround图像(x, y)开始的区域。
+ */
+bool __stdcall LPROverlay(LPRImage* pImForeground, LPRImage* pImBackGround, int x, int y);
+
+#ifdef WIN32
+
+/**
+ * 将指定的字库按照给定的参数生成图片，并缓存起来。
+ *
+ * param subtitle - 字库内容
+ * param fontFamilys - 字体家族数组
+ * param fontFamilysCount - 字体家族数组的大小
+ * param fontSizes - 字体大小数组
+ * param fontSizesCount - 字体大小数组的大小
+ * param savePath - dat文件的保存路径
+ *
+ * return 成功则返回缓存的图片，否则返回NULL
+ */
+EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize);
+
+#endif//WIN32
+
+/**
+  * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
+  *
+  * param pRawImage - 以JPG格式编码过的图像（目前仅支持JPG码流输入）
+  * param subtitle - 字幕内容，字幕内容中的宽字符必须都在字库中存在。
+  * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
+  * param pImages - 图片库
+  *
+  * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
+  */
+LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subtitle, const EventFont &fontParam, const EventSubtitleImages *pImages);
 
 #endif //SUBTITLEOVERLAY_H
