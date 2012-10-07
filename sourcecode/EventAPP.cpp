@@ -234,9 +234,9 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	*(pValue + 5) = (int*)new StatusMap;									// EventAPP的第六个成员保存从跟踪开始到结束的历史breakrule状态的叠加值
 	//*(pValue + 6) = new int(0);									// EventAPP的第七个成员保存每个物体的某个breakrule是否已经录制过视频，防止录制相同物体的相同违章
 	*(pValue + 6) = (int*)new MediaConverter((EventAPPViedoFormat)irParam.mRecordParam.mViedoFormat, irParam.mRecordParam.mBitFrequent);  // EventAPP的第八个成员保存MediaConvertoer，用了录制视频
-	SubtitleOverlay* pSubTitleOverlay = &SubtitleOverlay::getInstance();
+	//SubtitleOverlay* pSubTitleOverlay = &SubtitleOverlay::getInstance();
 	//pSubTitleOverlay->initialize(irParam.mFont.mCharactors, irParam.mFont);
-	*(pValue + 7) = (int*)pSubTitleOverlay;					                // EventAPP的第九个成员用来叠加字母
+	//*(pValue + 7) = (int*)pSubTitleOverlay;					                // EventAPP的第九个成员用来叠加字母
 	*(pValue + 8) = NULL;													// EventAPP的第十个成员用了识别车牌
 	*(pValue + 9) = (int*)new PlateMap;									// EventAPP的第十一个成员用了保存每个车的车牌号
 	*(pValue + 10) = (int*)new CaptureImageMap;						// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
@@ -300,7 +300,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	StatusMap* pStatusMap = (StatusMap*)(*(pValue + 5));
 	//int* pPoolStartCheckIndex = *(pValue + 6);	
 	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 6));
-	SubtitleOverlay* pSubtitleOverlay = (SubtitleOverlay*)(*(pValue + 7));
+	//SubtitleOverlay* pSubtitleOverlay = (SubtitleOverlay*)(*(pValue + 7));
 	LPR* pLPR = (LPR*)(*(pValue + 8));
 	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 9));
 	CaptureImageMap* pLeaveStopLineImage = (CaptureImageMap*)(*(pValue + 10));
@@ -906,7 +906,7 @@ EventAPP::~EventAPP()
 	CaptureImageMap* pTouchStopLineImage = (CaptureImageMap*)(*(pValue + 4));
 	StatusMap* pStatusMap = (StatusMap*)(*(pValue + 5));
 	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 6));
-	SubtitleOverlay* pSubtitleOverlay = (SubtitleOverlay*)(*(pValue + 7));
+	//SubtitleOverlay* pSubtitleOverlay = (SubtitleOverlay*)(*(pValue + 7));
 	LPR* pLPR = (LPR*)(*(pValue + 8));
 	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 9));
 	CaptureImageMap* pLeaveStopLineImage = (CaptureImageMap*)(*(pValue + 10));
@@ -995,9 +995,9 @@ EventAPP::~EventAPP()
 
 }
 
-APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, LPRImage** oppImage)
+APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, const EventSubtitleImages* ipSubtitleImages, LPRImage** oppImage)
 {
-	if (ipImage == NULL || ipString == NULL || oppImage == NULL)
+	if (ipImage == NULL || ipString == NULL || ipSubtitleImages == NULL || oppImage == NULL)
 	{
 #ifdef __DEBUG
 		TRACE("EventAPP::AddSubTitle input null pointer");
@@ -1006,14 +1006,15 @@ APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, LPRI
 	}
 	int** pValue = (int**)mObject;
 	EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
-	SubtitleOverlay* pSubtitleOverlay;
-	*oppImage = pSubtitleOverlay->overlaySubtitle(ipImage, ipString, pEventParam->mFont);
+	//SubtitleOverlay* pSubtitleOverlay;
+	//*oppImage = pSubtitleOverlay->overlaySubtitle(ipImage, ipString, pEventParam->mFont);
+	*oppImage = LPROverlaySubtitle(ipImage, ipString, pEventParam->mFont, ipSubtitleImages);
 	if(*oppImage == NULL)
 		return APP_FAIL;
 	return APP_OK;
 }
 
-APPRESULT EventAPP::SynthesisImages(LPRImage** ipImage, int iNumOfImages, LPRImage** oppImage)
+APPRESULT EventAPP::SynthesisImages(LPRImage** ipImage, int iNumOfImages, const VSDRect& irRect, LPRImage** oppImage)
 {
 	if (ipImage == NULL || oppImage == NULL)
 	{
@@ -1025,8 +1026,9 @@ APPRESULT EventAPP::SynthesisImages(LPRImage** ipImage, int iNumOfImages, LPRIma
 
 	int** pValue = (int**)mObject;
 	EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
-	ImageSynthesis* pImageSynthesis = (ImageSynthesis*)(*(pValue + 14));
-	*oppImage = pImageSynthesis->synthesis(ipImage, pEventParam->mImageSynthesis);
+	ImageSynthesis* pImageSynthesis = (ImageSynthesis*)(*(pValue + 13));
+	pEventParam->mImageSynthesis.mNumberofImage = iNumOfImages;
+	*oppImage = pImageSynthesis->synthesis(ipImage, pEventParam->mImageSynthesis, irRect);
 	if (*oppImage == NULL)
 		return APP_FAIL;
 	return APP_OK;
@@ -1041,7 +1043,7 @@ APPRESULT EventAPP::Convert2Media(LPRImage** ipImage, int iNumOfImages, EventMed
 #endif
 	}
 	int** pValue = (int**)mObject;
-	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 7));
+	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 6));
 	bool ret = pMediaConverter->imgs2media(ipImage, iNumOfImages, orMedia);
 	if(!ret)
 		return APP_FAIL;
@@ -1442,7 +1444,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
-	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisZoon", 0.0f, 1.0f, ipEventParam->mImageSynthesis.mZoonRatio);
+	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisZoom", 0.0f, 1.0f, ipEventParam->mImageSynthesis.mZoomRatio);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 

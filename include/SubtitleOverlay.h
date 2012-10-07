@@ -9,13 +9,6 @@
 using std::map;
 using std::string;
 
-struct EventSubtitleImages
-{
-	LPRImage ***mImages;	// 字体家族优先的二维LPRImage*数组，mImages[i][j]表示字体家族为mFontFamilys[i]，字符为mSubtitle[j]的图片
-	int *mFontFamilys;		// 所有的字体家族
-	int mFontFamilysCount; // 字体家族个数
-	wchar_t *mSubtitle;		// 字体库
-};
 
 /**
  * 将pImSub图像复制到pImLarge图像的rect区域。

@@ -23,6 +23,14 @@
 #error "No platform specified!"
 #endif
 
+struct EventSubtitleImages
+{
+	LPRImage ***mImages;	// 字体家族优先的二维LPRImage*数组，mImages[i][j]表示字体家族为mFontFamilys[i]，字符为mSubtitle[j]的图片
+	int *mFontFamilys;		// 所有的字体家族
+	int mFontFamilysCount; // 字体家族个数
+	wchar_t *mSubtitle;		// 字体库
+};
+
 // 记录各种违章录像范围
 struct EventRecordParam
 {
@@ -59,7 +67,7 @@ struct EventImageSynthesis
 {
 	int mNumberofImage;				   // 合成图片的数目
 	int mPicOrientation;               // 图片的摆放，取值范围为EventAPPPicOrientation
-	float mZoonRatio;                 // 原始图片的缩放比例
+	float mZoomRatio;                 // 原始图片的缩放比例
 };
 
 // EventAPP参数

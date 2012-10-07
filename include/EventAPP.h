@@ -53,13 +53,14 @@ public:
 	// 输入参数 ipImage: 需要叠加字幕的源图片
 	// 输入参数 ipString: 需要叠加的字幕
 	// 输出参数 oppImage: 叠加好字幕的图片
-	APPRESULT AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, LPRImage** oppImage);
+	APPRESULT AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, const EventSubtitleImages* ipSubtitleImages ,LPRImage** oppImage);
 
 	// 把指定数目个图片合成一张图片
 	// 输入参数 ipImage: 指向输入图片的数组
 	// 输入参数 iNumOfImages: 输入图片的个数
+	// 输入参数 irRect: 因为需要将ipImage所指的第一个图片的车的位置放大，所以irRect代表车所在的范围
 	// 输出参数 oppImage; 指向合成的图片指针的指针
-	APPRESULT SynthesisImages(LPRImage** ipImage, int iNumOfImages, LPRImage** oppImage);
+	APPRESULT SynthesisImages(LPRImage** ipImage, int iNumOfImages, const VSDRect& irRect, LPRImage** oppImage);
 
 	// 把指定数目的图片合成视频
 	// 输入参数 ipImage: 指向输入图片的数组
