@@ -59,7 +59,7 @@ struct EventImageSynthesis
 {
 	int mNumberofImage;				   // 合成图片的数目
 	int mPicOrientation;               // 图片的摆放，取值范围为EventAPPPicOrientation
-	double mZoonRatio;                 // 原始图片的缩放比例
+	double mZoomRatio;                 // 原始图片的缩放比例
 };
 
 // EventAPP参数

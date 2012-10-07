@@ -98,10 +98,10 @@ LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynt
 		return NULL;
 	}
 	// 如果生成了大图，并且需要进行缩放
-	if (NULL != pLargeImg && synthesisParam.mZoonRatio != 1.0)
+	if (NULL != pLargeImg && synthesisParam.mZoomRatio != 1.0)
 	{
-		int nTargetWidth = (int)(pLargeImg->width * synthesisParam.mZoonRatio + 0.5f);
-		int nTargetHeight = (int)(pLargeImg->height * synthesisParam.mZoonRatio + 0.5f);
+		int nTargetWidth = (int)(pLargeImg->width * synthesisParam.mZoomRatio + 0.5f);
+		int nTargetHeight = (int)(pLargeImg->height * synthesisParam.mZoomRatio + 0.5f);
 		LPRImage* pImTextResized = LPRCreateImage(nTargetWidth, nTargetHeight, pLargeImg->depth, pLargeImg->nChannels);
 		LPRResizeImage(pLargeImg, pImTextResized);
 		LPRReleaseImage(pLargeImg);
