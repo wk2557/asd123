@@ -59,7 +59,7 @@ struct EventImageSynthesis
 {
 	int mNumberofImage;				   // 合成图片的数目
 	int mPicOrientation;               // 图片的摆放，取值范围为EventAPPPicOrientation
-	double mZoonRatio;                 // 原始图片的缩放比例
+	float mZoonRatio;                 // 原始图片的缩放比例
 };
 
 // EventAPP参数
@@ -75,10 +75,12 @@ struct EventAPPParam
 	VSDRatioLine mRightTurnLine;		// 右转线标志线，禁止右拐时跨过为违章
 	VSDRatioLine mStraightLine;			// 直行标志线，越过改线后禁止左右转
 	EventRecordParam mRecordParam;		// 各种违章情况下违章录像情况
-	double mRatioToCrossLine;			// 车道压线比例阈值，超过这个阈值判定压道行驶
+	float mRatioToCrossLine;			// 车道压线比例阈值，超过这个阈值判定压道行驶
 	EventFont mFont;					// 合成图片的字母信息
 	EventImageSynthesis mImageSynthesis;// 将N张图片合成一个图片的参数
 	int mRulePriority[RULE_TYPES];
+	float mReverseRatio;
+	float mStopRatio;
 	//std::map<int, int> mRulePriority;
 };
 

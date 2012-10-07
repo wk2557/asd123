@@ -57,7 +57,7 @@ static T __stdcall MaxT(T a, T b)
 }
 
 // 图像上的绝对矩形转换为相对矩形
-static inline void __stdcall ToRatioRECT(const VSDRect& irRect, double iXRatio, double iYRatio, VSDRatioRECT& orRECT)
+static inline void __stdcall ToRatioRECT(const VSDRect& irRect, float iXRatio, float iYRatio, VSDRatioRECT& orRECT)
 {
 	orRECT.left = irRect.x * iXRatio;
 	orRECT.top = irRect.y * iYRatio;
@@ -113,7 +113,7 @@ static bool __stdcall GetCrossRatioPoint(const VSDRatioLine& irLineA, const VSDR
 	if(Int64(area_cda) * area_cdb >= 0)
 		return false;
 	
-	double t = (double)(area_cda) / (area_abd - area_abc);
+	float t = (float)(area_cda) / (area_abd - area_abc);
 	orPointC.x = int(a.x + t * (b.x - a.x));
 	orPointC.y = a.y + t * (b.y - a.y);
 	return true;
@@ -125,7 +125,7 @@ static inline bool __stdcall IsSame(const VSDRatioPoint& irPointA, const VSDRati
 	return irPointA.x == irPointB.x && irPointA.y == irPointB.y;
 }
 
-static double __stdcall GetCrossRatio(const VSDRatioLine& irLine, const VSDRatioRECT& irRECT)
+static float __stdcall GetCrossRatio(const VSDRatioLine& irLine, const VSDRatioRECT& irRECT)
 {
 	VSDRatioLine lRectLineArray[4] = {{{irRECT.left, irRECT.top}, {irRECT.right, irRECT.top}},{{irRECT.right, irRECT.top}, {irRECT.right, irRECT.bottom}},
 									 {{irRECT.right, irRECT.bottom}, {irRECT.left, irRECT.bottom}},{{irRECT.left, irRECT.bottom}, {irRECT.left, irRECT.top}}};
@@ -175,17 +175,17 @@ static double __stdcall GetCrossRatio(const VSDRatioLine& irLine, const VSDRatio
 
 	if(2 != index)
 		return 0;
-	double middleX =  (double(crossPoint[0].x) + crossPoint[1].x) / 2;
-	double middleY =  (double(crossPoint[0].y) + crossPoint[1].y) / 2;
+	float middleX =  (float(crossPoint[0].x) + crossPoint[1].x) / 2;
+	float middleY =  (float(crossPoint[0].y) + crossPoint[1].y) / 2;
 	
-	double areaA = (middleX - irRECT.left) * ( middleY - irRECT.top);
-	double areaB = (irRECT.right - middleX) * (middleY - irRECT.top );
-	double areaC = (irRECT.right - middleX) * (irRECT.bottom- middleY);
-	double areaD = (middleX - irRECT.left) * (irRECT.bottom - middleY);
+	float areaA = (middleX - irRECT.left) * ( middleY - irRECT.top);
+	float areaB = (irRECT.right - middleX) * (middleY - irRECT.top );
+	float areaC = (irRECT.right - middleX) * (irRECT.bottom- middleY);
+	float areaD = (middleX - irRECT.left) * (irRECT.bottom - middleY);
 
-	double minArea = MinT(MinT(areaA,areaB), MinT(areaC, areaD));
+	float minArea = MinT(MinT(areaA,areaB), MinT(areaC, areaD));
 	
-	double areaRect = (irRECT.bottom - irRECT.top) * (irRECT.right - irRECT.left);
+	float areaRect = (irRECT.bottom - irRECT.top) * (irRECT.right - irRECT.left);
 	return minArea * 4 / areaRect;
 }
 
@@ -209,6 +209,11 @@ typedef std::map<int, int> RecordMap;
 EventAPP::EventAPP()
 {
 	mObject = new int*[20];
+	int** pValue = (int**)mObject;
+	for(int i = 0; i < 20; ++i)
+	{
+		*(pValue + i) = NULL;
+	}
 }
 
 APPRESULT EventAPP::Init(const EventAPPParam& irParam)
@@ -396,7 +401,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	}
 	
 	// 得到压线阈值
-	double crossRatio = pAPPParam->mRatioToCrossLine;
+	float crossRatio = pAPPParam->mRatioToCrossLine;
 
 	// 把物体的Rect转化为 RatioRect
 	VSDRatioRECT objectRatioRECT;
@@ -407,8 +412,8 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 #endif
 		return APP_IMAGE_FORMAT_FAULT;
 	}
-	double imageXRatio = lVSDParam.nWidthBase / (double)(*pImageWidth);
-	double imageYRatio = lVSDParam.nHeightBase / (double)(*pImageHeight);
+	float imageXRatio = lVSDParam.nWidthBase / (float)(*pImageWidth);
+	float imageYRatio = lVSDParam.nHeightBase / (float)(*pImageHeight);
 	
 	int lObjectCount = ipObjectMulti->nObjects;
 	VSDObject lObject;
@@ -426,8 +431,6 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		lObject = ipObjectMulti->objects[index];
 		// objectRatioRECT 转化后的矩形
 		ToRatioRECT(lObject.rect, imageXRatio, imageYRatio, objectRatioRECT);
-		// 在virtualLoopImagePool 里保存一张图片，供没有违章的车辆用。同时在这张图片里提取每个物体的车牌号到pPlateMap中
-
 		// 抓取物体接触停车线的图片
 		int lObjectMiddleLine = objectRatioRECT.top + (objectRatioRECT.bottom - objectRatioRECT.top) / 2; 
 		int lMiddleStopLine = (pAPPParam->mStopLine.pt1.y + pAPPParam->mStopLine.pt2.y ) /2;
@@ -452,7 +455,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				}
 			}
 		}
-		// 抓取物体离开停车线的图片, 
+		// 抓取物体离开停车线的图片 
 		if(lMiddleStopLine <= objectRatioRECT.bottom && lMiddleStopLine >= lObjectMiddleLine)
 		{
 			if(lVSDParam.nEventType == VSDEvent_VehicleHead)
@@ -619,22 +622,89 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[3]);
 		}
 		// 判断是否逆行
-		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_REVERSE]] && lObject.status & VSD_BR_REVERSE)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_REVERSE]])// && lObject.status & VSD_BR_REVERSE)
 		{
+			VSDObjectTrack lObjectTrack;
+			lObjectTrack.uid = -1;
+			for (int i= 0; i < ipObjectTrackMulti->nObjects; ++i)
+			{
+				if (ipObjectTrackMulti->objTracks[i].uid == lObject.uid)
+				{
+					lObjectTrack = ipObjectTrackMulti->objTracks[i];
+					break;
+				}
+			}
+			if (lObjectTrack.uid != -1)
+			{
+				int lTrackNum = lObjectTrack.nTracks;
+				if (lTrackNum > 1)
+				{
+					if(lVSDParam.nEventType == VSDEvent_VehicleHead && lObjectTrack.tracks[0].y - lObject.rect.height * pAPPParam->mReverseRatio > lObjectTrack.tracks[lTrackNum - 1].y)
+					{
 #ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "逆行" << lObject.nLoopID << std::endl;
+						lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "逆行" << lObject.nLoopID << std::endl;
 #endif
-			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
-			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[5]);
+						lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
+						lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[5]);
+					}
+					else if(lVSDParam.nEventType == VSDEvent_VehicleTail && lObjectTrack.tracks[0].y + lObject.rect.height * pAPPParam->mReverseRatio < lObjectTrack.tracks[lTrackNum - 1].y)
+					{
+#ifdef __DEBUG
+						lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "逆行" << lObject.nLoopID << std::endl;
+#endif
+						lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
+						lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[5]);
+					}
+				}
+			}
 		}
 		// 判断是否违章停车
-		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_STOP]] && lObject.status & VSD_BR_STOP)
+		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_STOP]])// && lObject.status & VSD_BR_STOP)
 		{
+			int lObjectMiddleX = (objectRatioRECT.left + objectRatioRECT.right ) / 2;//lObject.rect.width / 2 + lObject.rect.x;
+			int lObjectMiddleY = (objectRatioRECT.bottom + objectRatioRECT.top) / 2;// lObject.rect.height / 2 + lObject.rect.y;
+			VSDRatioPoint lTmpPoint = {lObjectMiddleX, lObjectMiddleY};
+			if(IsInRect(lTmpPoint, pAPPParam->mStopForbidRect))
+			{
+				VSDObjectTrack lObjectTrack;
+				lObjectTrack.uid = -1;
+				for (int i= 0; i < ipObjectTrackMulti->nObjects; ++i)
+				{
+					if (ipObjectTrackMulti->objTracks[i].uid == lObject.uid)
+					{
+						lObjectTrack = ipObjectTrackMulti->objTracks[i];
+						break;
+					}
+				}
+				if (lObjectTrack.uid != -1)
+				{
+					int lTrackNum = lObjectTrack.nTracks;
+					if (lTrackNum > 1)
+					{
+						int lCurrentX = lObject.rect.width / 2 + lObject.rect.x;
+						int lCurrentY = lObject.rect.height / 2 + lObject.rect.y;
+
+						int lPreviousX = lObjectTrack.tracks[lTrackNum - 2].width / 2 + lObjectTrack.tracks[lTrackNum - 2].x;
+						int lPreviousY = lObjectTrack.tracks[lTrackNum - 2].height / 2 + lObjectTrack.tracks[lTrackNum - 2].y;
+						if ((lCurrentX - lPreviousX) * (lCurrentX - lPreviousX) + (lCurrentY - lPreviousY) * (lCurrentY - lPreviousY) < (pAPPParam->mStopRatio * lObject.rect.width) * (pAPPParam->mStopRatio*lObject.rect.width))
+						{
+#ifdef __DEBUG
+							lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章停车" << lObject.nLoopID << std::endl;
+#endif
+							lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STOP;
+							lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[7]);
+						}
+					}
+
+				}
+			}
+/*
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章停车" << lObject.nLoopID << std::endl;
 #endif
 			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STOP;
 			lMaxPriority = MaxT(lMaxPriority, pAPPParam->mRulePriority[7]);
+			*/
 		}
 		(*pStatusMap)[lObject.uid] |= lPoolData.mBreakRules[lObject.uid];
 		(*pPriorityMap)[lObject.uid] = lMaxPriority;
@@ -663,7 +733,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 			ConstructResult(itObject->second, VSD_BR_RED_LIGHT, itObject->first, opResult, lResultCount);
 			ConstructResult(itObject->second, VSD_BR_STOP, itObject->first, opResult, lResultCount);
 			
-			// 清除
+			// 清除不在需要的数据
 			int lShowUp = 0;
 			for(int i = 1; i < pPool->size(); ++i)
 			{
@@ -724,43 +794,6 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 			}
 		}
 	}
-
-	/*
-	if (lResultCount > 0)
-	{
-		char buf[256];
-		char img[256];
-		for(int i = 0; i < lResultCount;++i)
-		{
-			_snprintf(buf, 256, "test_%d_%d.avi", opResult->mppAPPResult[i].mID, opResult->mppAPPResult[i].mBreakRule);
-			_snprintf(img, 256, "F:\\test_%d_%d.jpg", opResult->mppAPPResult[i].mID, opResult->mppAPPResult[i].mBreakRule);
-			if (opResult->mppAPPResult[i].mBreakRule != VSD_BR_NONE)
-			{
-				pMediaConverter->imgs2media((opResult->mppAPPResult[i].mImage), opResult->mppAPPResult[i].mNumOfImage, buf);
-			}
-			else
-			{
-			//	pSubtitleOverlay->overlaySubtitle((opResult->mppAPPResult[i].mImage[0]), img, "123445km");
-			}
-		}
-		for(ResultList::iterator it = lResultList.begin(); it != lResultList.end(); ++it)
-		{
-			_snprintf(buf, 256, "test_%d_%d.avi", it->mID, it->mBreakRule);
-			_snprintf(img, 256, "F:\\test_%d_%d.jpg", it->mID, it->mBreakRule);
-			if(it->mBreakRule != VSD_BR_NONE)
-			{
-				pMediaConverter->imgs2media((it->mImage), it->mNumOfImage, buf);
-			}
-			else
-			{
-				pSubtitleOverlay->overlaySubtitle((it->mImage[0]), img, "123445km");
-			}
-		}
-	}
-
-		*/
-
-
 	return APP_OK;
 }
 
@@ -865,24 +898,6 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 
 EventAPP::~EventAPP()
 {
-	/*
-	int** pValue = (int**)mObject;
-	EventAPPParam* pAPPParam = (EventAPPParam*)(*pValue);
-	ImagePool* pPool = (ImagePool*)(*(pValue + 1));
-	VSDRatioLine* laneMark = (VSDRatioLine*)(*(pValue + 2));
-	int* pPoolLength =(int*)(*(pValue + 3));
-	CaptureImageMap* pTouchStopLineImage = (CaptureImageMap*)(*(pValue + 4));
-	StatusMap* pStatusMap = (StatusMap*)(*(pValue + 5));
-	//StatusMap* pRemoveStatusMap = (StatusMap*)(*(pValue + 6));
-	MediaConverter* pMediaConverter = (MediaConverter*)(*(pValue + 6));
-	LPR* pLPR = (LPR*)(*(pValue + 9));
-	PlateMap* pPlateMap = (PlateMap*)(*(pValue + 10));
-	CaptureImageMap* pLeaveStopLineImage = (CaptureImageMap*)(*(pValue + 11));
-	int* pImageWidth = (int*)(*(pValue + 12));
-	int* pImageHeight = (int*)(*(pValue + 13));
-	ImageSynthesis* pImageSynthesis = (ImageSynthesis*)(*(pValue + 14));
-	RectMap* pRectMap = (RectMap*)(*(pValue + 15));
-	*/
 	int** pValue = (int**)mObject;
 	EventAPPParam* pAPPParam = (EventAPPParam*)(*pValue);
 	ImagePool* pPool = (ImagePool*)(*(pValue + 1));
@@ -908,36 +923,51 @@ EventAPP::~EventAPP()
 
 	delete pAPPParam;
 
-	while(!pPool->empty())
+	if(pPool != NULL)
 	{
-		LPRReleaseImage(pPool->front().mpImage);
-		pPool->pop_front();
+		while(!pPool->empty())
+		{
+			LPRReleaseImage(pPool->front().mpImage);
+			pPool->pop_front();
+		}
+		delete pPool;
 	}
-	delete pPool;
 
 	delete[] laneMark;
 
 	delete pPoolLength;
 
-	for(CaptureImageMap::iterator it = pTouchStopLineImage->begin(); it != pTouchStopLineImage->end(); ++it)
-		LPRReleaseImage(it->second);
-	delete pTouchStopLineImage;
+	if(pTouchStopLineImage != NULL)
+	{
+		for(CaptureImageMap::iterator it = pTouchStopLineImage->begin(); it != pTouchStopLineImage->end(); ++it)
+			LPRReleaseImage(it->second);
+		delete pTouchStopLineImage;
+	}
 
 	delete pStatusMap;
 	delete pMediaConverter;
 	
-	pLPR->Fini();
-	delete pLPR;
-
-	for (PlateMap::iterator it = pPlateMap->begin(); it != pPlateMap->end(); ++it)
+	if(pLPR != NULL)
 	{
-		delete[] it->second;
+		pLPR->Fini();
+		delete pLPR;
 	}
-	delete pPlateMap;
 
-	for(CaptureImageMap::iterator it = pLeaveStopLineImage->begin(); it != pLeaveStopLineImage->end(); ++it)
-		LPRReleaseImage(it->second);
-	delete pLeaveStopLineImage;
+	if(pPlateMap != NULL)
+	{
+		for (PlateMap::iterator it = pPlateMap->begin(); it != pPlateMap->end(); ++it)
+		{
+			delete[] it->second;
+		}
+		delete pPlateMap;
+	}
+
+	if(pLeaveStopLineImage != NULL)
+	{
+		for(CaptureImageMap::iterator it = pLeaveStopLineImage->begin(); it != pLeaveStopLineImage->end(); ++it)
+			LPRReleaseImage(it->second);
+		delete pLeaveStopLineImage;
+	}
 
 
 	delete pImageHeight;
@@ -949,13 +979,19 @@ EventAPP::~EventAPP()
 	delete pRecordMap;
 
 
-	for(CaptureImageMap::iterator it = pTouchCentreLineImage->begin(); it != pTouchCentreLineImage->end(); ++it)
-		LPRReleaseImage(it->second);
-	delete pTouchCentreLineImage;
+	if(pTouchCentreLineImage != NULL)
+	{
+		for(CaptureImageMap::iterator it = pTouchCentreLineImage->begin(); it != pTouchCentreLineImage->end(); ++it)
+			LPRReleaseImage(it->second);
+		delete pTouchCentreLineImage;
+	}
 
-	for(CaptureImageMap::iterator it = pTouchVirtualLoopLineImage->begin(); it != pTouchVirtualLoopLineImage->end(); ++it)
-		LPRReleaseImage(it->second);
-	delete pTouchVirtualLoopLineImage;
+	if (pTouchVirtualLoopLineImage != NULL)
+	{
+		for(CaptureImageMap::iterator it = pTouchVirtualLoopLineImage->begin(); it != pTouchVirtualLoopLineImage->end(); ++it)
+			LPRReleaseImage(it->second);
+		delete pTouchVirtualLoopLineImage;
+	}
 
 }
 
@@ -1113,7 +1149,8 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	std:;string valueString;
 	while(::getline(ifs,lineString))
 	{
-		if(lineString.empty())
+		MyStrim(lineString);
+		if(lineString.empty() || lineString[0] == '#')
 			continue;
 		nPosition = lineString.find('=');
 		if(nPosition == std::string::npos || nPosition == 0)
@@ -1269,7 +1306,15 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 		return lAPPResult;
 
 	// 初始化压线阈值
-	lAPPResult = CheckAndSetValue(keyValue, "CrossRatio", 0.0, 1.0, ipEventParam->mRatioToCrossLine);
+	lAPPResult = CheckAndSetValue(keyValue, "CrossRatio", 0.0f, 1.0f, ipEventParam->mRatioToCrossLine);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	
+	lAPPResult = CheckAndSetValue(keyValue, "ReverseRatio", 0.0f, 1.0f, ipEventParam->mReverseRatio);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+	
+	lAPPResult = CheckAndSetValue(keyValue, "StopRatio", 0.0f, 1.0f, ipEventParam->mStopRatio);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1397,7 +1442,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
-	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisZoon", 0.0, 1.0, ipEventParam->mImageSynthesis.mZoonRatio);
+	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisZoon", 0.0f, 1.0f, ipEventParam->mImageSynthesis.mZoonRatio);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1539,7 +1584,7 @@ int main(int argc, char *argv[])
 	VSDRatioLine line = {{2,1},{2,3}};
 	VSDRatioRECT rect = {1,3,3,1};
 
-	double length = GetCrossRatio(line, rect);
+	float length = GetCrossRatio(line, rect);
 	std::cout << length << std::endl;
 
 	VSDEventParam lParam;	
@@ -1558,8 +1603,10 @@ int main(int argc, char *argv[])
 	time_t tBegin;
 	tBegin = time(NULL);
 	//////////////////////////////////////////////////////////////////////////
+	int x = 0;
 	for(vector<wstring>::iterator it = lFiles.begin(); it != lFiles.end(); ++it)
 	{
+		x++;
 		fileName = *it;
 		lCurrentPicName = *it;
 		std::ifstream ifs(fileName.c_str(), std::ios::binary);
