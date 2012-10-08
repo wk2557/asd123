@@ -208,9 +208,9 @@ typedef std::map<int, int> RecordMap;
 
 EventAPP::EventAPP()
 {
-	mObject = new int*[20];
+	mObject = new int*[21];
 	int** pValue = (int**)mObject;
-	for(int i = 0; i < 20; ++i)
+	for(int i = 0; i < 21; ++i)
 	{
 		*(pValue + i) = NULL;
 	}
@@ -233,7 +233,7 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	*(pValue + 4) = (int*)new CaptureImageMap;							// EventAPP的第五个成员保存每个车辆的在停车线附近的照片
 	*(pValue + 5) = (int*)new StatusMap;									// EventAPP的第六个成员保存从跟踪开始到结束的历史breakrule状态的叠加值
 	//*(pValue + 6) = new int(0);									// EventAPP的第七个成员保存每个物体的某个breakrule是否已经录制过视频，防止录制相同物体的相同违章
-	*(pValue + 6) = (int*)new MediaConverter((EventAPPViedoFormat)irParam.mRecordParam.mViedoFormat, irParam.mRecordParam.mBitFrequent);  // EventAPP的第八个成员保存MediaConvertoer，用了录制视频
+	*(pValue + 6) = (int*)new MediaConverter((EventAPPViedoFormat)irParam.mRecordParam.mViedoFormat, irParam.mRecordParam.mFramFrequent, irParam.mRecordParam.mBitFrequent);  // EventAPP的第八个成员保存MediaConvertoer，用了录制视频
 	//SubtitleOverlay* pSubTitleOverlay = &SubtitleOverlay::getInstance();
 	//pSubTitleOverlay->initialize(irParam.mFont.mCharactors, irParam.mFont);
 	//*(pValue + 7) = (int*)pSubTitleOverlay;					                // EventAPP的第九个成员用来叠加字母
@@ -260,6 +260,7 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	*(pValue + 17) = (int*)new RecordMap;
 	*(pValue + 18) = (int*)new CaptureImageMap;
 	*(pValue + 19) = (int*)new CaptureImageMap;
+	*(pValue + 20) = new int(maxAhead);
 	return APP_OK;
 }
 
@@ -312,6 +313,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	RecordMap* pRecordMap = (RecordMap*)(*(pValue + 17));
 	CaptureImageMap* pTouchCentreLineImage = (CaptureImageMap*)(*(pValue + 18));
 	CaptureImageMap* pTouchVirtualLoopLineImage = (CaptureImageMap*)(*(pValue + 19));
+	int* pStartFramIndex = (int*)(*(pValue + 20));
 	
 
 	// 得到VSDEventParam的参数
@@ -443,6 +445,9 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				{
 					LPRImage *pImage = LPRCloneImage(ipImage);
 					pTouchStopLineImage->insert(make_pair(lObject.uid, pImage));
+					RectMap::iterator itRect = pRectMap->find(lObject.uid); 
+					if(itRect == pRectMap->end())
+						pRectMap->insert(make_pair(lObject.uid, lObject.rect));
 				}
 			}
 			else
@@ -465,6 +470,9 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				{
 					LPRImage *pImage = LPRCloneImage(ipImage);
 					pTouchStopLineImage->insert(make_pair(lObject.uid, pImage));
+					RectMap::iterator itRect = pRectMap->find(lObject.uid); 
+					if(itRect == pRectMap->end())
+						pRectMap->insert(make_pair(lObject.uid, lObject.rect));
 				}
 			}
 			else
@@ -497,9 +505,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				LPRImage* pImage = LPRCloneImage(ipImage);
 				pTouchVirtualLoopLineImage->insert(make_pair(lObject.uid, pImage));
 			}
-			RectMap::iterator itRect = pRectMap->find(lObject.uid); 
-			if(itRect == pRectMap->end())
-				pRectMap->insert(make_pair(lObject.uid, lObject.rect));
+
 			PlateMap::iterator itPlateMap = pPlateMap->find(lObject.uid);
 			if(itPlateMap == pPlateMap->end())
 			{
@@ -719,8 +725,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		PoolData lCheckPoolData = pPool->front();
 		LPRReleaseImage(lCheckPoolData.mpImage);
 		pPool->pop_front();
-		// 查看中间数据的违章情况
-		lCheckPoolData = pPool->at(0);
+		lCheckPoolData = pPool->at(*pStartFramIndex);
 		// 遍历当前poolData中的所有object的违章记录
 		for(std::map<int, int>::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
 		{
@@ -735,7 +740,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 			
 			// 清除不在需要的数据
 			int lShowUp = 0;
-			for(int i = 1; i < pPool->size(); ++i)
+			for(int i = *pStartFramIndex + 1; i < pPool->size(); ++i)
 			{
 				PoolData lTmpPoolData = pPool->at(i);
 				if(lTmpPoolData.mBreakRules.find(itObject->first) != lTmpPoolData.mBreakRules.end())
@@ -814,6 +819,7 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 	PriorityMap* pPriorityMap = (PriorityMap*)(*(pValue + 16)); 
 	RecordMap* pRecordMap = (RecordMap*)(*(pValue + 17));
 	CaptureImageMap* pTouchVirtualLoopLineImage = (CaptureImageMap*)(*(pValue + 19));
+	int* pStartFramIndex = (int*)(*(pValue + 20));
 
 
 	// objects是否有违规情况，并且是否要录制iRuleType
@@ -848,8 +854,8 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 			lAPPResult.mRect.y = 0;
 		}
 		// 填充EventAPPResult的mViedoImage信息
-		int lBeginIndex = 0;// MaxT(*pPoolStartCheckIndex - pAPPParam->mRecordParam.mBreakRuleAhead[(*pRuleIndexMap)[iRuleType]], 0);
-		int lEndIndex = MinT(pAPPParam->mRecordParam.mBreakRuleBehind[(*pRuleIndexMap)[iRuleType]], *pPoolLength - 1);
+		int lBeginIndex =  MaxT(*pStartFramIndex - pAPPParam->mRecordParam.mBreakRuleAhead[(*pRuleIndexMap)[iRuleType]], 0);
+		int lEndIndex = MinT(pAPPParam->mRecordParam.mBreakRuleBehind[(*pRuleIndexMap)[iRuleType]] + *pStartFramIndex, *pPoolLength - 1);
 		int lSizeToCopy = lEndIndex - lBeginIndex + 1;
 		LPRImage* lpImage = NULL;
 		for (int i = 0; i < lSizeToCopy; ++i )
@@ -919,6 +925,7 @@ EventAPP::~EventAPP()
 	RecordMap* pRecordMap = (RecordMap*)(*(pValue + 17));
 	CaptureImageMap* pTouchCentreLineImage = (CaptureImageMap*)(*(pValue + 18));
 	CaptureImageMap* pTouchVirtualLoopLineImage = (CaptureImageMap*)(*(pValue + 19));
+	int* pStartFramIndex = (int*)(*(pValue + 20));
 
 
 	delete pAPPParam;
@@ -992,6 +999,7 @@ EventAPP::~EventAPP()
 			LPRReleaseImage(it->second);
 		delete pTouchVirtualLoopLineImage;
 	}
+	delete pStartFramIndex;
 
 }
 
@@ -1068,6 +1076,11 @@ APPRESULT EventAPP::Convert2Media(LPRImage** ipImage, int iNumOfImages, EventMed
 		LPRReleaseImage(ipAPPResult->mPlateImage);
 }
 
+void __stdcall FreeEventMedia(EventMedia *pMedia)
+{
+	av_free(pMedia->mBufferPtr);
+}
+
 void __stdcall FreeMultiAPPResult(EventMultiAPPResult* ipMultiAPPResult)
 {
 	if (!ipMultiAPPResult)
@@ -1103,6 +1116,18 @@ static int str2wstr(wchar_t *dst, const char *src, int srcSize)
 	dst[cchWideChar] = L'\0';
 	return cchWideChar;
 }
+
+/*
+
+static int wstr2str(const char *drc, wchar_t *src, int srcSize)
+{
+	int cchWideChar = WideCharToMultiByte(CP_ACP, 0, (LPCSTR)src, srcSize, 0, 0);
+	if(cchWideChar < 0) return false;
+	WideCharToMultiByte(CP_ACP, 0,(LPCSTR)src, srcSize, dst, cchWideChar);
+	dst[cchWideChar] = L'\0';
+	return cchWideChar;
+}
+*/
 
 typedef std::map<std::string, std::string> KeyValue;
 
@@ -1403,6 +1428,10 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 	
+	lAPPResult = CheckAndSetValue(keyValue, "ViedoFramFrequent", 0, 20, ipEventParam->mRecordParam.mFramFrequent);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
 	lAPPResult = CheckAndSetValue(keyValue, "ViedoBitFrequent", 0, 1000000000, ipEventParam->mRecordParam.mBitFrequent);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
@@ -1411,15 +1440,19 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
+	lAPPResult = CheckAndSetValue(keyValue, "FontFamily", 0, 1, ipEventParam->mFont.mFontFamily);
+	if (lAPPResult != APP_OK)
+		return lAPPResult;
+
 	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_R", 0, 256, ipEventParam->mFont.mFontRGB_R); 
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 	
-	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_R", 0, 256, ipEventParam->mFont.mFontRGB_R); 
+	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_G", 0, 256, ipEventParam->mFont.mFontRGB_G); 
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 	
-	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_R", 0, 256, ipEventParam->mFont.mFontRGB_R); 
+	lAPPResult = CheckAndSetValue(keyValue, "FontRGB_B", 0, 256, ipEventParam->mFont.mFontRGB_B); 
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1606,6 +1639,9 @@ int main(int argc, char *argv[])
 	tBegin = time(NULL);
 	//////////////////////////////////////////////////////////////////////////
 	int x = 0;
+	EventSubtitleImages* pEventSubtitleIamge;
+	int font[2] = {0,1};
+	pEventSubtitleIamge = LPRGenerateCharacterImagesDat(L"1234567890km", font, 2, 128);
 	for(vector<wstring>::iterator it = lFiles.begin(); it != lFiles.end(); ++it)
 	{
 		x++;
@@ -1649,8 +1685,62 @@ int main(int argc, char *argv[])
 		int lLights[MAX_VIRTUAL_LOOPS] = {0, 0, 0, 0};
 		lResult = lEvent.GetAllTracks(&lObjectTrackMulti);
 		lEventApp.ProcessFram(&imgJPG,&lObjectMulti, &lObjectTrackMulti, lLights, &lAPPResult);
+		char resultFileName[256];
+		char plateName[256];
+		char* buf;
+		ofstream ofs;
+		
+		
+		for(int i = 0; i < lAPPResult.mNumOfResult; ++i)
+		{
+			EventAPPResult lResult = lAPPResult.mppAPPResult[i];
+			if (lResult.mBreakRule == VSD_BR_NONE)
+			{
+				if (lResult.mNumOfSynthesisImage > 0)
+				{
+					//wstr2str(lResult.mPlate, plateName);
+					_snprintf(resultFileName,256, "F:\\resultdata\\%d.jpg", lResult.mID);
+					ofs.open(resultFileName, std::ios::binary);
+					ofs.write((const char*)lResult.mSynthesisImage[0]->pData, lResult.mSynthesisImage[0]->imageSize);
+					ofs.close();
+				}
+			}
+			else
+			{
+				if (lResult.mNumOfSynthesisImage == 3)
+				{
+					_snprintf(resultFileName,256, "F:\\resultdata\\%d.jpg", lResult.mID);
+					ofs.open(resultFileName, std::ios::binary);
+					LPRImage* lpImage = NULL;
+					APPRESULT retCode = lEventApp.SynthesisImages(lResult.mSynthesisImage, lResult.mNumOfSynthesisImage, lResult.mRect, &lpImage);
+					buf = new char[10 * nJpgLen]; 
+					int length;
+					LPREncodeImage(lpImage, (unsigned char*)buf, &length,LPR_ENCODE_FORMAT_JPG, 40);
+					//buftitle = new char[10 * nJpgLen];
+					LPRImage* pSubtitleImage = new LPRImage;
 
-
+					pSubtitleImage->pData = (unsigned char*) buf;
+					pSubtitleImage->imageSize = length;
+					LPRImage* lpImageSubtile;
+					lEventApp.AddSubTitle(pSubtitleImage,L"12345",pEventSubtitleIamge, &lpImageSubtile);
+					LPREncodeImage(lpImageSubtile, (unsigned char*)buf, &length,LPR_ENCODE_FORMAT_JPG, 80);
+					ofs.write((const char*)buf, length);
+					ofs.close();
+					delete[] buf;
+					LPRReleaseImage(lpImage);
+					LPRReleaseImage(lpImageSubtile);
+					delete pSubtitleImage;
+				}
+				EventMedia lMedia;
+				lEventApp.Convert2Media(lResult.mViedoImage, lResult.mNumOfViedoImage, lMedia);
+				_snprintf(resultFileName,256, "F:\\resultdata\\%d.avi", lResult.mID);
+				ofs.open(resultFileName, std::ios::binary);
+				ofs.write((const char*)lMedia.mBufferPtr, lMedia.mBufferSize);
+				ofs.close();
+				//delete[] lMedia.mBufferPtr;
+				FreeEventMedia(&lMedia);
+			}
+		}
 		delete[] pJpgBuf;
 		FreeMultiAPPResult(&lAPPResult);
 	}

@@ -38,6 +38,7 @@ struct EventRecordParam
 	int mBreakRuleBehind[RULE_TYPES];  // VSD_BR_TURN_LEFT 到 VSD_BR_LOW_SPEED 9种违章，数组中的每一项分别记录对于违章行为，应录像到违章行为后的多少帧 
 	//std::map<int, int> mBreakRuleAhead;
 	//std::map<int, int> mBreakRuleBehind;
+	int mFramFrequent;
 	int mViedoFormat;				   // 视频格式，取值范围为为EventAPPViedoFormat
 	int mBitFrequent;				   // 视频比特率
 };
@@ -119,6 +120,7 @@ struct EventMultiAPPResult
 
 EVENTAPP_API void __stdcall FreeMultiAPPResult(EventMultiAPPResult* ipMultiAPPResult);
 EVENTAPP_API void __stdcall FreeAPPResult(EventAPPResult* ipAPPResult);
+EVENTAPP_API void __stdcall FreeEventMedia(EventMedia *pMedia);
 EVENTAPP_API APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ipEventParam);
 
 #endif

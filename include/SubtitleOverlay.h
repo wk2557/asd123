@@ -1,6 +1,23 @@
 #ifndef SUBTITLEOVERLAY_H
 #define SUBTITLEOVERLAY_H
 
+#if defined(WIN32)
+#ifdef EVENTAPP_EXPORTS
+#define EVENTAPP_API __declspec(dllexport)
+#else
+#define EVENTAPP_API __declspec(dllimport)
+#endif
+#elif defined(LINUX)
+#ifdef EVENTAPP_EXPORTS
+#define EVENTAPP_API __attribute__ ((visibility("default")))
+#else
+#define EVENTAPP_API
+#endif
+#else
+#error "No platform specified!"
+#endif
+
+
 #include "EventAPPStructure.h"
 #include <LPRVideo.h>
 #include <string>
@@ -37,7 +54,7 @@ bool __stdcall LPROverlay(LPRImage* pImForeground, LPRImage* pImBackGround, int 
  *
  * return 成功则返回缓存的图片，否则返回NULL
  */
-EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize);
+EVENTAPP_API EventSubtitleImages*  __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize);
 
 #endif//WIN32
 
