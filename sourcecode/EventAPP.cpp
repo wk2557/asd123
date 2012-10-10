@@ -1707,6 +1707,7 @@ int main(int argc, char *argv[])
 	EventAPP lEventApp;
 	EventAPPParam lAPPParam;
 	//////////////////////////////////////////////////////////////////////////
+	InitEventAPPParam(&lAPPParam);
 	EventAPP_LoadParam("F:\\EvenAPP_Param.ini", &lAPPParam);
 	lEventApp.Init(lAPPParam);
 	std::wstring fileDir(L"F:\\EventData\\images\\120327");
