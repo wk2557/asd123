@@ -39,7 +39,7 @@ struct EventRecordParam
 	//std::map<int, int> mBreakRuleAhead;
 	//std::map<int, int> mBreakRuleBehind;
 	int mFramFrequent;
-	int mViedoFormat;				   // 视频格式，取值范围为为EventAPPViedoFormat
+	int mVideoFormat;				   // 视频格式，取值范围为为EventAPPVideoFormat
 	int mBitFrequent;				   // 视频比特率
 };
 
@@ -80,7 +80,7 @@ struct EventAPPParam
 	VSDRatioLine mStopLine;				// 停车线位置
 	VSDRatioLine mCentreLine;				// 中心线位置，用来保存物体到达中间时的图片
 	VSDRatioRECT mStopForbidRect;		// 禁止停车矩形
-	VSDRatioLine mleftTurnLine;			// 左转线标志线，禁止左拐时跨过为违章
+	VSDRatioLine mLeftTurnLine;			// 左转线标志线，禁止左拐时跨过为违章
 	VSDRatioLine mRightTurnLine;		// 右转线标志线，禁止右拐时跨过为违章
 	VSDRatioLine mStraightLine;			// 直行标志线，越过改线后禁止左右转
 	EventRecordParam mRecordParam;		// 各种违章情况下违章录像情况
@@ -98,11 +98,11 @@ struct EventAPPParam
 struct EventAPPResult
 {
 	int mID;															// 物体的ID
-	int mNumOfViedoImage;												// 用于合成录像的图像的个数
+	int mNumOfVideoImage;												// 用于合成录像的图像的个数
 	int mNumOfSynthesisImage;											// 用于合成大图片的原始图片个数
 	wchar_t mPlate[LPR_PLATE_STR_LEN];									// 物体的车牌号
 	int mBreakRule;														// ID物体违反的规则
-	LPRImage* mViedoImage[MAX_FRAM_AHEAD + MAX_FRAM_BHEIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
+	LPRImage* mVideoImage[MAX_FRAM_AHEAD + MAX_FRAM_BHEIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
 																		// 如果mBreakRule不是VSD_BR_NONE，那么前MAX_FRAM_AHEAD + MAX_FRAM_BEHIND张用来合成录像，后面三张分别是接触停车线，离开停车线，违章时的三张图片
 	LPRImage* mSynthesisImage[MAX_SYNTHESIS_NUM];						
 	LPRImage* mPlateImage;

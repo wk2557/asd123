@@ -1,5 +1,6 @@
 #include "SubtitleOverlay.h"
 
+
 #ifdef WIN32
 #include <Windows.h>
 #endif

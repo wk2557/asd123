@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <cassert>
 
-MediaConverter::MediaConverter(EventAPPViedoFormat encoderType, int outputFrameRate, int bitRate) 
+MediaConverter::MediaConverter(EventAPPVideoFormat encoderType, int outputFrameRate, int bitRate) 
 	: mInputFramePtr(NULL), 
 	mInputPixFmt(PIX_FMT_NONE), 
 	mPTS(0), 
