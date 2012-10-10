@@ -125,6 +125,8 @@ EVENTAPP_API void __stdcall FreeMultiAPPResult(EventMultiAPPResult* ipMultiAPPRe
 EVENTAPP_API void __stdcall FreeAPPResult(EventAPPResult* ipAPPResult);
 EVENTAPP_API void __stdcall FreeEventMedia(EventMedia *pMedia);
 EVENTAPP_API APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ipEventParam);
+// for test
+EVENTAPP_API void __stdcall forTest(); 
 
 
 #endif

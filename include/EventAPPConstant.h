@@ -41,8 +41,8 @@ enum EventAPPRuleSwitch
 
 enum EventAPPPlateCaptureSwitch
 {
-	EVENT_APP_PLATE_SWITCH_ON      = 0,
-	EVENT_APP_PLATE_SWITCH_OFF     = 1,
+	EVENT_APP_PLATE_SWITCH_OFF      = 0,
+	EVENT_APP_PLATE_SWITCH_ON     = 1,
 };
 
 typedef int APPRESULT;
