@@ -1,5 +1,5 @@
 #include "SubtitleOverlay.h"
-
+#include <cassert>
 
 #ifdef WIN32
 #include <Windows.h>
@@ -194,7 +194,9 @@ static LPRImage* __stdcall LPRGenerateCharacterImage(wchar_t ch, HDC memDC, HBIT
 	return LPRHBitmapToLPRImage(memDC, hbm);
 }
 
-EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize)
+
+static const wchar_t *DEFAULT_SUBTITLE = L"？0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ京津黑吉辽蒙冀豫鲁鄂沪苏浙皖湘赣粤闽桂琼云贵川渝藏晋陕甘宁青新军空海沈南广成兰济北使警港澳学挂临";
+EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize)
 {
 	EventSubtitleImages *pImages = NULL;
 	// 得到字体名
@@ -217,18 +219,21 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, 
 	// 填充结构体
 	pImages = new EventSubtitleImages;
 	// 复制字体库
+	size_t defaultSubtitleCount = wcslen(DEFAULT_SUBTITLE);
 	size_t subtitleCount = wcslen(subtitle);
-	pImages->mSubtitle = new wchar_t[subtitleCount];
-	wcscpy(pImages->mSubtitle, subtitle);
+	size_t upperSubtitleCount = defaultSubtitleCount + subtitleCount;
+	wchar_t *upperSubtitle = new wchar_t[upperSubtitleCount + 1];
+	wcscpy(upperSubtitle, DEFAULT_SUBTITLE);
+	wcscpy(upperSubtitle + defaultSubtitleCount, subtitle);
+	wcsupr(upperSubtitle);
+	
 	// 复制字体家族
 	pImages->mFontFamilysCount = fontFamilysCount;
 	pImages->mFontFamilys = new int[fontFamilysCount];
 	for (int i = 0; i < fontFamilysCount; ++ i)
 		pImages->mFontFamilys[i] = fontFamilys[i];
 	// 生成数组
-	pImages->mImages = new LPRImage **[fontFamilysCount];
-	for (int i = 0; i < fontFamilysCount; ++ i)
-		pImages->mImages[i] = new LPRImage *[subtitleCount];
+	pImages->mWCharImageMapArray = new std::map<wchar_t, LPRImage*>[fontFamilysCount];
 	
 	// 创建字体绘制环境
 	HDC memDC = CreateCompatibleDC(NULL);
@@ -237,6 +242,7 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, 
 	HFONT *hfonts = new HFONT[fontFamilysCount];
 	for (int i = 0; i < fontFamilysCount; ++ i)
 	{
+
 		hfonts[i] = CreateFont(maxFontSize, 0, 0, 0, FW_THIN, false, false, false, 
 				DEFAULT_CHARSET, OUT_CHARACTER_PRECIS, CLIP_CHARACTER_PRECIS, 
 				DEFAULT_QUALITY, FF_MODERN, fontFamilyNames[i]);
@@ -245,14 +251,22 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, 
 	//char savePath[256];
 	for (int i = 0; i < fontFamilysCount; ++ i)
 	{
+		std::map<wchar_t, LPRImage*> &wchar2image = pImages->mWCharImageMapArray[i];
 		SelectObject(memDC, hbm);	// 选择画布
 		SelectObject(memDC, hfonts[i]);	// 选择字体
-		for (int j = 0; j < subtitleCount; ++ j)
+		for (int j = 0; j < upperSubtitleCount; ++ j)
 		{
-			LPRImage *pImage = LPRGenerateCharacterImage(subtitle[j], memDC, hbm, maxFontSize);
-			//_snprintf(savePath, 256, "d:\\gen_img_%d_%d.jpg", i, j);
-			//LPRSaveImage(pImage, savePath);
-			pImages->mImages[i][j] = pImage;
+			std::map<wchar_t, LPRImage*>::iterator it = wchar2image.find(upperSubtitle[j]);
+			if (it == wchar2image.end())
+			{
+				LPRImage *pImage = LPRGenerateCharacterImage(upperSubtitle[j], memDC, hbm, maxFontSize);
+				wchar2image[upperSubtitle[j]] = pImage;
+				/*if (i == 0)
+				{
+					_snprintf(savePath, 256, "d:\\gen_img_%d_%d.jpg", i, j);
+					LPRSaveImage(pImage, savePath);
+				}*/
+			}
 		}
 	}
 	//////////////////////////////////////////////////////////////////////////
@@ -261,14 +275,37 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, 
 		DeleteObject((HGDIOBJ)(hfonts[i]));
 	DeleteObject((HGDIOBJ)hbm);
 	DeleteDC(memDC);
+	delete []upperSubtitle;
 
 	return pImages;
 }
 
 #endif
 
+ void LPRReleaseSubtitleImages(EventSubtitleImages *pImages)
+ {
+	 assert(NULL != pImages);
+	 for (int i = 0; i < pImages->mFontFamilysCount; ++ i)
+	 {
+		 std::map<wchar_t, LPRImage*> &wchar2image = pImages->mWCharImageMapArray[i];
+		 for (std::map<wchar_t, LPRImage*>::iterator it = wchar2image.begin(), e = wchar2image.end(); it != e; ++ it)
+			 LPRReleaseImage(it->second);
+		 wchar2image.clear();
+	 }
+	 if (pImages->mWCharImageMapArray != NULL)
+	 {
+		 delete []pImages->mWCharImageMapArray;
+		 pImages->mWCharImageMapArray = NULL;
+	 }
+	 if (pImages->mFontFamilys != NULL)
+	 {
+		 delete []pImages->mFontFamilys;
+		 pImages->mFontFamilys = NULL;
+	 }	
+ }
+
 /**
- * 根据指定的宽字符和字体参数得到该字符图片。
+ * 根据指定的宽字符和字体参数得到该字符图片。注意返回的图像必须由调用者释放。
  *
  * param wch - 宽字符
  * param fontParam - 字体参数
@@ -293,24 +330,8 @@ static LPRImage* __stdcall LPRGetCharacterImage(const EventSubtitleImages *pImag
 		printf("Could not find font family %d.\n", fontParam.mFontFamily);
 		return NULL;
 	}
-	// 得到字体索引
-	int subtitleIndex = -1;
-	int subtitleCount = wcslen(pImages->mSubtitle);
-	for (int i = 0; i < subtitleCount; ++ i)
-	{
-		if (wch == pImages->mSubtitle[i])
-		{
-			subtitleIndex = i;
-			break;
-		}
-	}
-	if (-1 == subtitleIndex)
-	{
-		printf("Could not find wchar %lc.\n", wch);
-		return NULL;
-	}
 
-	LPRImage *pWCharImage = pImages->mImages[fontFamilyIndex][subtitleIndex];
+	LPRImage *pWCharImage = pImages->mWCharImageMapArray[fontFamilyIndex].find(wch)->second;
 
 	// 进行缩放
 	float zoomRatio = fontParam.mFontSize/100.0f;
@@ -350,31 +371,46 @@ static LPRImage* __stdcall LPRGetCharacterImage(const EventSubtitleImages *pImag
 	return pResultImage;
 }
 
-LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subtitle, const EventFont &fontParam, const EventSubtitleImages *pImages)
+/**
+  * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
+  *
+  * param pImBackground - BGR24格式图像
+  * param subtitle - 字幕内容，字幕内容中的宽字符必须都在字库中存在。
+  * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
+  * param pImages - 图片库
+  *
+  * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
+  */
+static bool __stdcall LPROverlaySubtitle(LPRImage *pImBackground, const wchar_t* subtitle, const EventFont &fontParam, const EventSubtitleImages *pImages)
 {
 	if (wcslen(subtitle) > 0)
 	{
 		// 检查所有的字符是否都在字库中
 		int wstrSize = wcslen(subtitle);
+		wchar_t *upperSubtitle = new wchar_t[wstrSize + 1];
+		wcscpy(upperSubtitle, subtitle);
+		wcsupr(upperSubtitle);
+
+		// 前提是有字幕图片生成
+		const std::map<wchar_t, LPRImage*> &wchar2image = pImages->mWCharImageMapArray[0];
 		for (int i = 0; i < wstrSize; ++ i)
 		{
-			if (wcschr(pImages->mSubtitle, subtitle[i]) == NULL)
+			if (wchar2image.find(upperSubtitle[i]) == wchar2image.end())
 			{
-				printf("Could not find wchar %lc in subtitle.\n", subtitle[i]);
+				printf("There is not corresponding image for %lc\n", upperSubtitle[i]);
 				return false;
 			}
 		}
 
-		// 从JPG码流中解压出BGR24
-		LPRImage *pImBackground = NULL;
-		LPRDecodeImage(&pImBackground, pRawImage->pData, pRawImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
+		/*LPRImage *pImBackground = NULL;
+		LPRDecodeImage(&pImBackground, pRawImage->pData, pRawImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);*/
 		//////////////////////////////////////////////////////////////////////////
-		//wchar_t *wstr = new wchar_t[subtitle.size()];
-		LPRImage *fontImg = LPRGetCharacterImage(pImages, subtitle[0], fontParam);
+		LPRImage *fontImg = LPRGetCharacterImage(pImages, upperSubtitle[0], fontParam);
 		int imgWidth = fontImg->width;		// 其实也就是fontSize
 		int imgHeight = fontImg->height;		// 其实也就是fontSize
 		int imgDepth = fontImg->depth;
 		int imgChannels = fontImg->nChannels;
+		LPRReleaseImage(fontImg);
 		LPRImage *subtitleImg = NULL;
 		switch (fontParam.mFontOrientation)
 		{
@@ -385,7 +421,7 @@ LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subti
 				{
 					printf("Out of band.\n");
 					LPRReleaseImage(pImBackground);
-					return NULL;
+					return false;
 				}
 				//////////////////////////////////////////////////////////////////////////
 				subtitleImg = LPRCreateImage(wstrSize*imgWidth, imgHeight, imgDepth, imgChannels);
@@ -396,7 +432,7 @@ LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subti
 					r.top  = 0; 
 					r.right = i * imgWidth + imgWidth;
 					r.bottom = imgHeight;
-					fontImg = LPRGetCharacterImage(pImages, subtitle[i], fontParam);
+					fontImg = LPRGetCharacterImage(pImages, upperSubtitle[i], fontParam);
 					LPRCopySubImageToLarge(fontImg, subtitleImg, r);
 					LPRReleaseImage(fontImg);
 				}
@@ -409,7 +445,7 @@ LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subti
 				{
 					printf("Out of band.\n");
 					LPRReleaseImage(pImBackground);
-					return NULL;
+					return false;
 				}
 				//////////////////////////////////////////////////////////////////////////
 				subtitleImg = LPRCreateImage(imgWidth, wstrSize*imgHeight, imgDepth, imgChannels);
@@ -420,7 +456,7 @@ LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subti
 					r.top  = i * imgHeight; 
 					r.right = imgWidth;
 					r.bottom = i * imgHeight + imgHeight;
-					fontImg = LPRGetCharacterImage(pImages, subtitle[i], fontParam);
+					fontImg = LPRGetCharacterImage(pImages, upperSubtitle[i], fontParam);
 					LPRCopySubImageToLarge(fontImg, subtitleImg, r);
 					LPRReleaseImage(fontImg);
 				}
@@ -431,13 +467,27 @@ LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subti
 				printf("Unsupported font orientation.\n");
 				LPRReleaseImage(pImBackground);
 			}
-			return NULL;
+			return false;
 		}
 		LPROverlay(subtitleImg, pImBackground, fontParam.mFontX, fontParam.mFontY);
 		//////////////////////////////////////////////////////////////////////////
 		LPRReleaseImage(subtitleImg);
+		delete []upperSubtitle;
 
-		return pImBackground;
+		return true;
 	}
-	return NULL;
+	return false;
+}
+
+
+LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages)
+{
+	assert(subtitles.mSubtitleSize == subtitles.mFontSize);
+	LPRImage *pImBackground = NULL;
+	LPRDecodeImage(&pImBackground, pRawImage->pData, pRawImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
+
+	for (int i = 0; i < subtitles.mSubtitleSize; ++ i)
+		LPROverlaySubtitle(pImBackground, subtitles.mSubtitles[i], subtitles.mFonts[i], pImages);
+	
+	return pImBackground;
 }

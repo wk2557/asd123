@@ -25,10 +25,9 @@
 
 struct EventSubtitleImages
 {
-	LPRImage ***mImages;	// 字体家族优先的二维LPRImage*数组，mImages[i][j]表示字体家族为mFontFamilys[i]，字符为mSubtitle[j]的图片
-	int *mFontFamilys;		// 所有的字体家族
-	int mFontFamilysCount; // 字体家族个数
-	wchar_t *mSubtitle;		// 字体库
+	std::map<wchar_t, LPRImage*> *mWCharImageMapArray;	// 宽字符到其对应图像map的数组，数组维度等于字体家族个数
+	int *mFontFamilys;								// 所有的字体家族
+	int mFontFamilysCount;							// 字体家族个数
 };
 
 // 记录各种违章录像范围
@@ -61,6 +60,14 @@ struct EventFont
 	int mFontOrientation;			   // 字体排放朝向，取值为范围为EventAPPFontOrientation
 	int mFontX;						   // 字体起始位置的X坐标
 	int mFontY;                        // 字体起始位置的Y坐标
+};
+
+struct EventSubtitleOverlay
+{
+	wchar_t **mSubtitles;				// 字符串数组，表示多个字幕
+	int mSubtitleSize;					// 字幕个数
+	EventFont *mFonts;					// 每个字幕对应的字体信息
+	int mFontSize;						// 该数应该与字幕个数相等
 };
 
 // N张图片合成一张
