@@ -29,8 +29,8 @@ enum EventAPPLightStatus
 
 enum EventAPPVideoFormat
 {
-	EVENT_APP_VIEDO_MJPG		= 0,			// 合成视频的格式为MJPG
-	EVENT_APP_VIEDO_H264		= 1,			// 合成视频的格式为H264
+	EVENT_APP_VIDEO_MJPG		= 0,			// 合成视频的格式为MJPG
+	EVENT_APP_VIDEO_H264		= 1,			// 合成视频的格式为H264
 };
 
 enum EventAPPRuleSwitch

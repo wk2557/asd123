@@ -29,10 +29,10 @@ MediaConverter::MediaConverter(EventAPPVideoFormat encoderType, int outputFrameR
 	}
 	switch (encoderType)
 	{
-	case EVENT_APP_VIEDO_MJPG:
+	case EVENT_APP_VIDEO_MJPG:
 		mOutputCodecId = AV_CODEC_ID_MJPEG;
 		break;
-	case EVENT_APP_VIEDO_H264:
+	case EVENT_APP_VIDEO_H264:
 		mOutputCodecId = AV_CODEC_ID_H264;
 		break;
 	default:
