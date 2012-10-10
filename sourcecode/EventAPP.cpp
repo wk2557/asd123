@@ -1599,7 +1599,7 @@ static bool CmpFileName(const string& a, const string& b)
 }
 
 
-/*
+
 
 void EmumAllJPGFileInFolder(std::wstring folder, std::vector<std::wstring>& files)
 {
@@ -1792,4 +1792,3 @@ int main(int argc, char *argv[])
 	std::cin >> i;
 	return 0;
 }
-*/
