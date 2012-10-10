@@ -267,13 +267,13 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	return APP_OK;
 }
 
-APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjectMulti, const VSDObjectTrackMulti* ipObjectTrackMulti, int isRedLightOn[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult)
+APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObjectMulti, const VSDObjectTrackMulti* ipObjectTrackMulti, int isRedLightOn[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult)
 {
 	opResult->mNumOfResult = 0;
 	if(!ipImage || !ipObjectMulti || !ipObjectTrackMulti)
 	{
 #ifdef __DEBUG
-		TRACE("EventAPP::ProcessFram input fault");
+		TRACE("EventAPP::ProcessFrame input fault");
 #endif
 		return APP_INPUT_NULL_POINTER;
 	}
@@ -281,7 +281,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	if (ipImage->nColorMode != CS_JPEG)
 	{
 #ifdef __DEBUG
-		TRACE("EventAPP::ProcessFram input fault");
+		TRACE("EventAPP::ProcessFrame input fault");
 #endif
 		return APP_IMAGE_FORMAT_FAULT;
 	}
@@ -289,7 +289,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 	if (ipObjectMulti->nObjects <= 0)
 	{
 #ifdef __DEBUG
-		TRACE("EventAPP::ProcessFram number of input ojbect is zero");
+		TRACE("EventAPP::ProcessFrame number of input ojbect is zero");
 #endif
 		return APP_OK;
 	}
@@ -332,7 +332,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		if(lResult != LPR_OK)
 		{
 #ifdef __DEBUG
-			TRACE("EventAPP::ProcessFram Fail to decode image");
+			TRACE("EventAPP::ProcessFrame Fail to decode image");
 #endif
 			LPRReleaseImage(pDecodeImage);
 			return APP_FAIL;
@@ -352,7 +352,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		if (pImageHeight == NULL || pImageWidth == NULL)
 		{
 #ifdef __DEBUG
-			TRACE("EventAPP::ProcessFram image height and width has not been inited");
+			TRACE("EventAPP::ProcessFrame image height and width has not been inited");
 #endif
 			return APP_FAIL;
 		}
@@ -360,7 +360,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 		if(lResult != LPR_OK)
 		{
 	#ifdef __DEBUG
-			TRACE("EventAPP::ProcessFram fail to generat lane mark");
+			TRACE("EventAPP::ProcessFrame fail to generat lane mark");
 	#endif
 			return APP_FAIL;
 		}
@@ -577,7 +577,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				if(lResult != LPR_OK)
 				{
 	#ifdef __DEBUG
-					TRACE("EventAPP::ProcessFram Fail to decode image");
+					TRACE("EventAPP::ProcessFrame Fail to decode image");
 	#endif
 					LPRReleaseImage(pDecodeImage);
 					return APP_FAIL;
@@ -586,7 +586,7 @@ APPRESULT EventAPP::ProcessFram(LPRImage *ipImage, const VSDObjectMulti* ipObjec
 				if (lResult != LPR_OK)
 				{
 	#ifdef __DEBUG
-					TRACE("EventAPP::ProcessFram fail to recognize plate");
+					TRACE("EventAPP::ProcessFrame fail to recognize plate");
 	#endif
 					LPRReleaseImage(pDecodeImage);
 					return APP_FAIL;
@@ -1725,7 +1725,7 @@ int main(int argc, char *argv[])
 		VSDObjectTrackMulti_Init(&lObjectTrackMulti);
 		int lLights[MAX_VIRTUAL_LOOPS] = {0, 0, 0, 0};
 		lResult = lEvent.GetAllTracks(&lObjectTrackMulti);
-		lEventApp.ProcessFram(&imgJPG,&lObjectMulti, &lObjectTrackMulti, lLights, &lAPPResult);
+		lEventApp.ProcessFrame(&imgJPG,&lObjectMulti, &lObjectTrackMulti, lLights, &lAPPResult);
 		char resultFileName[256];
 		char plateName[256];
 		char* buf;
