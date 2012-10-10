@@ -38,7 +38,7 @@ struct EventRecordParam
 	int mBreakRuleBehind[RULE_TYPES];  // VSD_BR_TURN_LEFT 到 VSD_BR_LOW_SPEED 9种违章，数组中的每一项分别记录对于违章行为，应录像到违章行为后的多少帧 
 	//std::map<int, int> mBreakRuleAhead;
 	//std::map<int, int> mBreakRuleBehind;
-	int mFramFrequent;
+	int mFrameFrequent;
 	int mVideoFormat;				   // 视频格式，取值范围为为EventAPPVideoFormat
 	int mBitFrequent;				   // 视频比特率
 };
@@ -68,7 +68,7 @@ struct EventImageSynthesis
 {
 	int mNumberofImage;				   // 合成图片的数目
 	int mPicOrientation;               // 图片的摆放，取值范围为EventAPPPicOrientation
-	float mZoomRatio;                 // 原始图片的缩放比例
+	int mZoomRatio;                 // 原始图片的缩放比例
 };
 
 // EventAPP参数
@@ -84,15 +84,15 @@ struct EventAPPParam
 	VSDRatioLine mRightTurnLine;		// 右转线标志线，禁止右拐时跨过为违章
 	VSDRatioLine mStraightLine;			// 直行标志线，越过改线后禁止左右转
 	EventRecordParam mRecordParam;		// 各种违章情况下违章录像情况
-	float mRatioToCrossLine;			// 车道压线比例阈值，超过这个阈值判定压道行驶
+	int mRatioToCrossLine;			// 车道压线比例阈值，超过这个阈值判定压道行驶
 	EventFont mFont;					// 合成图片的字母信息
 	EventImageSynthesis mImageSynthesis;// 将N张图片合成一个图片的参数
 	int mRulePriority[RULE_TYPES];
-	float mReverseRatio;
-	float mStopRatio;
+	int mReverseRatio;
+	int mStopRatio;
+	int mPlateCaptureSwitch;
 	//std::map<int, int> mRulePriority;
 };
-
 
 // EventAPP处理图片的输出结果
 struct EventAPPResult
@@ -102,7 +102,8 @@ struct EventAPPResult
 	int mNumOfSynthesisImage;											// 用于合成大图片的原始图片个数
 	wchar_t mPlate[LPR_PLATE_STR_LEN];									// 物体的车牌号
 	int mBreakRule;														// ID物体违反的规则
-	LPRImage* mVideoImage[MAX_FRAM_AHEAD + MAX_FRAM_BHEIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
+	int mLoopID;														// ID物体的车道
+	LPRImage* mVideoImage[MAX_FRAME_AHEAD + MAX_FRAME_BHEIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
 																		// 如果mBreakRule不是VSD_BR_NONE，那么前MAX_FRAM_AHEAD + MAX_FRAM_BEHIND张用来合成录像，后面三张分别是接触停车线，离开停车线，违章时的三张图片
 	LPRImage* mSynthesisImage[MAX_SYNTHESIS_NUM];						
 	LPRImage* mPlateImage;

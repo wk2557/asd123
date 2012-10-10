@@ -44,7 +44,7 @@ public:
 
 	// 处理图片流的主要接口。
 	// 输入参数 ipImage: 要处理的图像指针
-	// 输入参数 ipObjectMulti: 通过VSDEvent::ProcssFram得到的输出结果
+	// 输入参数 ipObjectMulti: 通过VSDEvent::ProcssFrame得到的输出结果
 	// 输入参数 isRedLightOn: 表示当前帧红灯是否是亮
 	// 输出参数 opResult: 输出到当前图片为止，刚刚离开跟踪区域的车辆的图片序列以及是否违章等信息，见EventMultiAPPResult的表述
 	APPRESULT ProcessFrame(LPRImage* ipImage, const VSDObjectMulti* ipObjectMulti,const VSDObjectTrackMulti* ipObjectTrackMult, int iLightStatus[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult); 
