@@ -611,7 +611,12 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 			}
 		}
 		int lObjectHistoryStatus = VSD_BR_NONE;
-		int lMaxPriority = (*pPriorityMap)[lObject.uid];
+		int lMaxPriority = -1; // = (*pPriorityMap)[lObject.uid];
+		PriorityMap::iterator itPriorityMap = pPriorityMap->find(lObject.uid);
+		if(itPriorityMap != pPriorityMap->end())
+			lMaxPriority = itPriorityMap->second;
+		else
+			lMaxPriority = 0;
 		lPoolData.mBreakRules[lObject.uid] = VSD_BR_NONE;
 		lPoolData.mLoop = lObject.nLoopID;
 		// 判断是否闯红灯
@@ -858,6 +863,7 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 	RuleIndexMap* pRuleIndexMap = (RuleIndexMap*)(*(pValue + 15));
 	PriorityMap* pPriorityMap = (PriorityMap*)(*(pValue + 16)); 
 	RecordMap* pRecordMap = (RecordMap*)(*(pValue + 17));
+	CaptureImageMap* pTouchCentreLineImage = (CaptureImageMap*)(*(pValue + 18));
 	CaptureImageMap* pTouchVirtualLoopLineImage = (CaptureImageMap*)(*(pValue + 19));
 	int* pStartFrameIndex = (int*)(*(pValue + 20));
 
@@ -898,6 +904,7 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 		int lBeginIndex =  MaxT(*pStartFrameIndex - pAPPParam->mRecordParam.mBreakRuleAhead[(*pRuleIndexMap)[iRuleType]], 0);
 		int lEndIndex = MinT(pAPPParam->mRecordParam.mBreakRuleBehind[(*pRuleIndexMap)[iRuleType]] + *pStartFrameIndex, *pPoolLength - 1);
 		int lSizeToCopy = lEndIndex - lBeginIndex + 1;
+		lSizeToCopy = MinT(lSizeToCopy, MAX_FRAME_AHEAD + MAX_FRAME_BEHIND);
 		LPRImage* lpImage = NULL;
 		for (int i = 0; i < lSizeToCopy; ++i )
 		{
@@ -920,10 +927,20 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
 		}
 		if(iRuleType == VSD_BR_RED_LIGHT)
-			lpImage = LPRCloneImage(lAPPResult.mVideoImage[lSizeToCopy - 1]);
+		{
+			CaptureImageMap::iterator itCentreImage = pTouchCentreLineImage->find(uid);
+			if(itCentreImage != pTouchCentreLineImage->end())
+			{
+				lpImage = LPRCloneImage(lAPPResult.mVideoImage[lSizeToCopy - 1]);
+				lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+			}
+		}
 		else
+		{
 			lpImage = LPRCloneImage(pPool->at(*pStartFrameIndex).mpImage);
-		lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+		}
+		
 		lAPPResult.mNumOfSynthesisImage = lSynthesisNum;
 		// 填充EventAPPResult的mPlateImage信息
 		CaptureImageMap::iterator itPlateImage = pTouchVirtualLoopLineImage->find(uid);
@@ -1203,6 +1220,11 @@ APPRESULT __stdcall CheckAndSetValue(const KeyValue& irKeyValue, const std::stri
 	return APP_OK;
 }
 
+void __stdcall InitEventAPPParam(EventAPPParam* opEventAPPParam)
+{
+	::memset(opEventAPPParam, 0, sizeof(EventAPPParam));
+}
+
 APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ipEventParam)
 {
 	if (!ipFileName || !ipEventParam)
@@ -1394,7 +1416,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordBreakNoneFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[0]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordBreakNoneFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[0]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordBreakNoneFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[0]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 		*/
@@ -1404,7 +1426,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnLeftFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[1]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnLeftFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[1]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnLeftFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[1]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1412,7 +1434,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnRightFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[2]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnRightFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[2]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordTurnRightFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[2]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1420,7 +1442,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordStraightFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[3]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordStraightFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[3]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordStraightFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[3]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1428,7 +1450,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordCrossLineFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[4]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordCrossLineFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[4]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordCrossLineFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[4]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1436,7 +1458,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordReverseFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[5]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordReverseFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[5]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordReverseFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[5]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1444,7 +1466,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordRedLightFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[6]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordRedLightFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[6]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordRedLightFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[6]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1452,7 +1474,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordStopFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[7]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordStopFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[7]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordStopFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[7]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1460,7 +1482,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordHighSpeedFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[8]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordHighSpeedFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[8]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordHighSpeedFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[8]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
@@ -1468,7 +1490,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "RecordLowSpeedFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[9]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordLowSpeedFramBehind", 0, MAX_FRAME_BHEIND, ipEventParam->mRecordParam.mBreakRuleBehind[9]);
+	lAPPResult = CheckAndSetValue(keyValue, "RecordLowSpeedFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[9]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 	
@@ -1484,9 +1506,11 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
+	/*
 	lAPPResult = CheckAndSetValue(keyValue, "FontSize", 0, 10000, ipEventParam->mFont.mFontSize);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
+	*/
 
 	lAPPResult = CheckAndSetValue(keyValue, "FontFamily", 0, 1, ipEventParam->mFont.mFontFamily);
 	if (lAPPResult != APP_OK)
@@ -1509,6 +1533,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
+	/*
 	lAPPResult = CheckAndSetValue(keyValue, "FontX", 0, ipEventParam->mVSDParam.nWidthBase, ipEventParam->mFont.mFontX);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
@@ -1516,11 +1541,12 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "FontY", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mFont.mFontY);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
+		
 
 	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisNum", 0, 10, ipEventParam->mImageSynthesis.mNumberofImage);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-
+*/
 	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisOrientation", 0, 3, ipEventParam->mImageSynthesis.mPicOrientation);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
@@ -1570,6 +1596,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 		return lAPPResult;
 		*/
 
+	ipEventParam->mRulePriority[0] = 0;
 	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakTurnLeftPriority", 0, 9, ipEventParam->mRulePriority[1]);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
@@ -1606,7 +1633,6 @@ static bool CmpFileName(const string& a, const string& b)
 {
 	return a.length() == b.length() ? a < b : a.length() < b.length();
 }
-
 
 
 
@@ -1671,6 +1697,7 @@ int main_b()
 	}
 	return 0;
 }
+
 int main(int argc, char *argv[])
 {
 	VSDEventParam lParam;	
@@ -1689,13 +1716,11 @@ int main(int argc, char *argv[])
 	time_t tBegin;
 	tBegin = time(NULL);
 	//////////////////////////////////////////////////////////////////////////
-	int x = 0;
 	EventSubtitleImages* pEventSubtitleIamge;
 	int font[2] = {0,1};
 	pEventSubtitleIamge = LPRGenerateCharacterImagesDat(L"1234567890km", font, 2, 128);
 	for(vector<wstring>::iterator it = lFiles.begin(); it != lFiles.end(); ++it)
 	{
-		x++;
 		fileName = *it;
 		lCurrentPicName = *it;
 		std::ifstream ifs(fileName.c_str(), std::ios::binary);
@@ -1741,8 +1766,7 @@ int main(int argc, char *argv[])
 			{
 				if (lResult.mNumOfSynthesisImage > 0)
 				{
-					//wstr2str(lResult.mPlate, plateName);
-					swprintf(resultFileName,256, L"F:\\resultdata\\%d_%S.jpg", lResult.mID, lResult.mPlate);
+					swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_车道%d_车牌%S.jpg", lResult.mID, lResult.mLoopID, lResult.mPlate);
 					ofs.open(resultFileName, std::ios::binary);
 					ofs.write((const char*)lResult.mSynthesisImage[0]->pData, lResult.mSynthesisImage[0]->imageSize);
 					ofs.close();
@@ -1752,7 +1776,7 @@ int main(int argc, char *argv[])
 			{
 				if (lResult.mNumOfSynthesisImage == 3)
 				{
-					swprintf(resultFileName,256, L"F:\\resultdata\\%d_%S_%d.jpg", lResult.mID, lResult.mPlate, lResult.mBreakRule);
+					swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_违反%d_车道%d_车牌%S.jpg", lResult.mID, lResult.mBreakRule, lResult.mLoopID, lResult.mPlate);
 					ofs.open(resultFileName, std::ios::binary);
 					LPRImage* lpImage = NULL;
 					APPRESULT retCode = lEventApp.SynthesisImages(lResult.mSynthesisImage, lResult.mNumOfSynthesisImage, lResult.mRect, &lpImage);
@@ -1776,7 +1800,7 @@ int main(int argc, char *argv[])
 				}
 				EventMedia lMedia;
 				lEventApp.Convert2Media(lResult.mVideoImage, lResult.mNumOfVideoImage, lMedia);
-				swprintf(resultFileName,256, L"F:\\resultdata\\%d_%S_%d.avi", lResult.mID, lResult.mPlate, lResult.mBreakRule);
+				swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_违反%d_车道%d_车牌%S.avi", lResult.mID, lResult.mBreakRule, lResult.mLoopID, lResult.mPlate);
 				ofs.open(resultFileName, std::ios::binary);
 				ofs.write((const char*)lMedia.mBufferPtr, lMedia.mBufferSize);
 				ofs.close();

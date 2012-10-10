@@ -103,7 +103,7 @@ struct EventAPPResult
 	wchar_t mPlate[LPR_PLATE_STR_LEN];									// 物体的车牌号
 	int mBreakRule;														// ID物体违反的规则
 	int mLoopID;														// ID物体的车道
-	LPRImage* mVideoImage[MAX_FRAME_AHEAD + MAX_FRAME_BHEIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
+	LPRImage* mVideoImage[MAX_FRAME_AHEAD + MAX_FRAME_BEHIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
 																		// 如果mBreakRule不是VSD_BR_NONE，那么前MAX_FRAM_AHEAD + MAX_FRAM_BEHIND张用来合成录像，后面三张分别是接触停车线，离开停车线，违章时的三张图片
 	LPRImage* mSynthesisImage[MAX_SYNTHESIS_NUM];						
 	LPRImage* mPlateImage;
@@ -119,9 +119,12 @@ struct EventMultiAPPResult
 };
 
 
+// 给EventAPPParam赋值之前必须先调用InitEventAPPParam函数
+EVENTAPP_API void __stdcall InitEventAPPParam(EventAPPParam* opEventAPPParam);
 EVENTAPP_API void __stdcall FreeMultiAPPResult(EventMultiAPPResult* ipMultiAPPResult);
 EVENTAPP_API void __stdcall FreeAPPResult(EventAPPResult* ipAPPResult);
 EVENTAPP_API void __stdcall FreeEventMedia(EventMedia *pMedia);
 EVENTAPP_API APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ipEventParam);
+
 
 #endif
