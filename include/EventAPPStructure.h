@@ -92,7 +92,7 @@ struct EventAPPParam
 	VSDRatioLine mStraightLine;			// 直行标志线，越过改线后禁止左右转
 	EventRecordParam mRecordParam;		// 各种违章情况下违章录像情况
 	int mRatioToCrossLine;			// 车道压线比例阈值，超过这个阈值判定压道行驶
-	EventFont mFont;					// 合成图片的字母信息
+	//EventFont mFont;					// 合成图片的字母信息
 	EventImageSynthesis mImageSynthesis;// 将N张图片合成一个图片的参数
 	int mRulePriority[RULE_TYPES];
 	int mReverseRatio;
@@ -132,8 +132,5 @@ EVENTAPP_API void __stdcall FreeMultiAPPResult(EventMultiAPPResult* ipMultiAPPRe
 EVENTAPP_API void __stdcall FreeAPPResult(EventAPPResult* ipAPPResult);
 EVENTAPP_API void __stdcall FreeEventMedia(EventMedia *pMedia);
 EVENTAPP_API APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ipEventParam);
-// for test
-EVENTAPP_API void __stdcall forTest(); 
-
 
 #endif

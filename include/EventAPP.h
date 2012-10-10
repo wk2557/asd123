@@ -53,7 +53,7 @@ public:
 	// 输入参数 ipImage: 需要叠加字幕的源图片
 	// 输入参数 ipString: 需要叠加的字幕
 	// 输出参数 oppImage: 叠加好字幕的图片
-	APPRESULT AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, const EventSubtitleImages* ipSubtitleImages ,LPRImage** oppImage);
+	APPRESULT AddSubTitle(LPRImage* ipImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages* ipSubtitleImages ,LPRImage** oppImage);
 
 	// 把指定数目个图片合成一张图片
 	// 输入参数 ipImage: 指向输入图片的数组

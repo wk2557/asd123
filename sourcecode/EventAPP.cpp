@@ -1082,9 +1082,9 @@ EventAPP::~EventAPP()
 	delete pLoopMap;
 }
 
-APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, const EventSubtitleImages* ipSubtitleImages, LPRImage** oppImage)
+APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const EventSubtitleOverlay& irSubTitleOverlay, const EventSubtitleImages* ipSubtitleImages, LPRImage** oppImage)
 {
-	if (ipImage == NULL || ipString == NULL || ipSubtitleImages == NULL || oppImage == NULL)
+	if (ipImage == NULL || ipSubtitleImages == NULL || oppImage == NULL)
 	{
 #ifdef __DEBUG
 		TRACE("EventAPP::AddSubTitle input null pointer");
@@ -1095,7 +1095,7 @@ APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const wchar_t* ipString, cons
 	EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
 	//SubtitleOverlay* pSubtitleOverlay;
 	//*oppImage = pSubtitleOverlay->overlaySubtitle(ipImage, ipString, pEventParam->mFont);
-	*oppImage = LPROverlaySubtitle(ipImage, ipString, pEventParam->mFont, ipSubtitleImages);
+	*oppImage = LPROverlaySubtitle(ipImage, irSubTitleOverlay, ipSubtitleImages);
 	if(*oppImage == NULL)
 		return APP_FAIL;
 	return APP_OK;
@@ -1526,6 +1526,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
+	/*
 	lAPPResult = CheckAndSetValue(keyValue, "FontSize", 0, 10000, ipEventParam->mFont.mFontSize);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
@@ -1558,7 +1559,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	lAPPResult = CheckAndSetValue(keyValue, "FontY", 0, ipEventParam->mVSDParam.nHeightBase, ipEventParam->mFont.mFontY);
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
-		
+		*/
 
 	lAPPResult = CheckAndSetValue(keyValue, "ImageSynthesisNum", 0, 10, ipEventParam->mImageSynthesis.mNumberofImage);
 	if (lAPPResult != APP_OK)
@@ -1648,7 +1649,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	 int a = 0;
  }
 
-/*
+ /*
 
 static bool CmpFileName(const string& a, const string& b)
 {
@@ -1780,7 +1781,13 @@ int main(int argc, char *argv[])
 		wchar_t resultFileName[256];
 		char* buf;
 		ofstream ofs;
-		
+		EventSubtitleOverlay lSubTitleOverlay;
+		EventFont lFont[2] = {{50, 0, 255, 0, 0, 1, 500, 200}, {80, 1, 0, 0, 255, 0, 800, 300}};
+		lSubTitleOverlay.mFonts = lFont;
+		lSubTitleOverlay.mFontSize = 2;
+		wchar_t* lSubtiles[2] = {L"京123", L"津456"};
+		lSubTitleOverlay.mSubtitles = lSubtiles;
+		lSubTitleOverlay.mSubtitleSize = 2;
 		
 		for(int i = 0; i < lAPPResult.mNumOfResult; ++i)
 		{
@@ -1806,13 +1813,12 @@ int main(int argc, char *argv[])
 					buf = new char[10 * nJpgLen]; 
 					int length;
 					LPREncodeImage(lpImage, (unsigned char*)buf, &length,LPR_ENCODE_FORMAT_JPG, 40);
-					//buftitle = new char[10 * nJpgLen];
 					LPRImage* pSubtitleImage = new LPRImage;
 
 					pSubtitleImage->pData = (unsigned char*) buf;
 					pSubtitleImage->imageSize = length;
 					LPRImage* lpImageSubtile;
-					lEventApp.AddSubTitle(pSubtitleImage,L"12345",pEventSubtitleIamge, &lpImageSubtile);
+					lEventApp.AddSubTitle(pSubtitleImage,lSubTitleOverlay, pEventSubtitleIamge, &lpImageSubtile);
 					LPREncodeImage(lpImageSubtile, (unsigned char*)buf, &length,LPR_ENCODE_FORMAT_JPG, 80);
 					ofs.write((const char*)buf, length);
 					ofs.close();
@@ -1827,7 +1833,6 @@ int main(int argc, char *argv[])
 				ofs.open(resultFileName, std::ios::binary);
 				ofs.write((const char*)lMedia.mBufferPtr, lMedia.mBufferSize);
 				ofs.close();
-				//delete[] lMedia.mBufferPtr;
 				FreeEventMedia(&lMedia);
 			}
 		}
@@ -1836,7 +1841,7 @@ int main(int argc, char *argv[])
 	}
 	time_t tEnd = time(NULL);
 	cout << "运行" << (tEnd - tBegin) / 60 << "分" << (tEnd - tBegin)%60 << "秒" << endl;
-
+	LPRReleaseSubtitleImages(pEventSubtitleIamge);
 	int i;
 	std::cin >> i;
 	return 0;
