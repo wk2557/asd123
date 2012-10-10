@@ -43,7 +43,7 @@ bool __stdcall LPROverlay(LPRImage* pImForeground, LPRImage* pImBackGround, int 
 #ifdef WIN32
 
 /**
- * 将指定的字库按照给定的参数生成图片，并缓存起来。
+ * 将指定的字库按照给定的参数生成图片，并缓存起来。返回的结果必须由调用者自己释放
  *
  * param subtitle - 字库内容
  * param fontFamilys - 字体家族数组
@@ -54,20 +54,24 @@ bool __stdcall LPROverlay(LPRImage* pImForeground, LPRImage* pImBackGround, int 
  *
  * return 成功则返回缓存的图片，否则返回NULL
  */
-EVENTAPP_API EventSubtitleImages*  __stdcall LPRGenerateCharacterImagesDat(wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize);
+EVENTAPP_API EventSubtitleImages*  __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize);
 
 #endif//WIN32
+
+/**
+ * 释放字幕图片缓存。
+ */
+EVENTAPP_API void LPRReleaseSubtitleImages(EventSubtitleImages *pImages);
 
 /**
   * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
   *
   * param pRawImage - 以JPG格式编码过的图像（目前仅支持JPG码流输入）
-  * param subtitle - 字幕内容，字幕内容中的宽字符必须都在字库中存在。
-  * param fontParam - 字幕参数，具体含义请参考EventFont结构体的定义
+  * param subtitles - 字幕内容，具体含义参考EventSubtitleOverlay结构定义。
   * param pImages - 图片库
   *
   * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
   */
-LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const wchar_t* subtitle, const EventFont &fontParam, const EventSubtitleImages *pImages);
+LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages);
 
 #endif //SUBTITLEOVERLAY_H
