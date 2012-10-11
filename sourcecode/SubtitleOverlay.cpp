@@ -253,7 +253,7 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 				DEFAULT_QUALITY, FF_MODERN, fontFamilyNames[i]);
 	}
 	// 开始生成图片
-	char savePath[256];
+	//char savePath[256];
 	for (int i = 0; i < fontFamilysCount; ++ i)
 	{
 		std::map<wchar_t, LPRImage*> &wchar2image = wcharImageMapArray[i];
@@ -267,10 +267,10 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 				LPRImage *pImage = LPRGenerateCharacterImage(upperSubtitle[j], memDC, hbm, maxFontSize);
 				wchar2image[upperSubtitle[j]] = pImage;
 				//if (i == 0)
-				{
+				/*{
 					_snprintf(savePath, 256, "d:\\test_img\\gen_img_%d_%d_%lc.jpg", i, j, upperSubtitle[j]);
 					LPRSaveImage(pImage, savePath);
-				}
+				}*/
 			}
 		}
 	}
