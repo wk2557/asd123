@@ -198,9 +198,13 @@ static LPRImage* __stdcall LPRGenerateCharacterImage(wchar_t ch, HDC memDC, HBIT
 static const wchar_t *DEFAULT_SUBTITLE = L"？0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ京津黑吉辽蒙冀豫鲁鄂沪苏浙皖湘赣粤闽桂琼云贵川渝藏晋陕甘宁青新军空海沈南广成兰济北使警港澳学挂临";
 EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subtitle, int *fontFamilys, int fontFamilysCount, int maxFontSize)
 {
-	EventSubtitleImages *pImages = NULL;
+	if (fontFamilysCount <= 0)
+	{
+		printf("You have to supply with at least one font family.\n");
+		return NULL;
+	}
 	// 得到字体名
-	wchar_t **fontFamilyNames = new wchar_t*[fontFamilysCount];
+	wchar_t **fontFamilyNames = new wchar_t*[fontFamilysCount];	// 字符串数组，需要释放数组，常量字符串，不需要释放
 	for (int i = 0; i < fontFamilysCount; ++ i)
 	{
 		switch (fontFamilys[i])
@@ -217,7 +221,7 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 		}
 	}
 	// 填充结构体
-	pImages = new EventSubtitleImages;
+	EventSubtitleImages *pImages = new EventSubtitleImages;	// 返回给调用者，由调用者自己释放
 	// 复制字体库
 	size_t defaultSubtitleCount = wcslen(DEFAULT_SUBTITLE);
 	size_t subtitleCount = wcslen(subtitle);
@@ -233,8 +237,9 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 	for (int i = 0; i < fontFamilysCount; ++ i)
 		pImages->mFontFamilys[i] = fontFamilys[i];
 	// 生成数组
-	pImages->mWCharImageMapArray = new std::map<wchar_t, LPRImage*>[fontFamilysCount];
-	
+	//pImages->mWCharImageMapArray = new std::map<wchar_t, LPRImage*>[fontFamilysCount];
+	std::map<wchar_t, LPRImage*> *wcharImageMapArray = new std::map<wchar_t, LPRImage*>[fontFamilysCount];
+
 	// 创建字体绘制环境
 	HDC memDC = CreateCompatibleDC(NULL);
 	// 创建画布
@@ -251,7 +256,7 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 	//char savePath[256];
 	for (int i = 0; i < fontFamilysCount; ++ i)
 	{
-		std::map<wchar_t, LPRImage*> &wchar2image = pImages->mWCharImageMapArray[i];
+		std::map<wchar_t, LPRImage*> &wchar2image = wcharImageMapArray[i];
 		SelectObject(memDC, hbm);	// 选择画布
 		SelectObject(memDC, hfonts[i]);	// 选择字体
 		for (int j = 0; j < upperSubtitleCount; ++ j)
@@ -261,13 +266,31 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 			{
 				LPRImage *pImage = LPRGenerateCharacterImage(upperSubtitle[j], memDC, hbm, maxFontSize);
 				wchar2image[upperSubtitle[j]] = pImage;
-				/*if (i == 0)
-				{
-					_snprintf(savePath, 256, "d:\\gen_img_%d_%d.jpg", i, j);
+				//if (i == 0)
+				/*{
+					_snprintf(savePath, 256, "d:\\test_img\\gen_img_%d_%d_%lc.jpg", i, j, upperSubtitle[j]);
 					LPRSaveImage(pImage, savePath);
 				}*/
 			}
 		}
+	}
+	// 将图片和字幕复制
+	pImages->mSubtitleCount = wcharImageMapArray[0].size();
+	pImages->mSubtitle = new wchar_t[pImages->mSubtitleCount + 1];
+	memset(pImages->mSubtitle, 0, (pImages->mFontFamilysCount + 1)*sizeof(wchar_t));
+	pImages->mImages = new LPRImage **[fontFamilysCount];
+	for (int i = 0; i < fontFamilysCount; ++ i)
+	{
+		pImages->mImages[i] = new LPRImage *[pImages->mSubtitleCount];
+		std::map<wchar_t, LPRImage*> &wchar2image = wcharImageMapArray[i];
+		int j = 0;
+		for (std::map<wchar_t, LPRImage*>::const_iterator it = wchar2image.begin(), e = wchar2image.end(); it != e; ++ it)
+		{
+			pImages->mSubtitle[j] = it->first;
+			pImages->mImages[i][j] = it->second;
+			++ j;
+		}
+		pImages->mSubtitle[pImages->mSubtitleCount] = L'\0';
 	}
 	//////////////////////////////////////////////////////////////////////////
 	// 释放资源
@@ -275,7 +298,9 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 		DeleteObject((HGDIOBJ)(hfonts[i]));
 	DeleteObject((HGDIOBJ)hbm);
 	DeleteDC(memDC);
+	delete []wcharImageMapArray;
 	delete []upperSubtitle;
+	delete []fontFamilyNames;
 
 	return pImages;
 }
@@ -285,7 +310,7 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
  void LPRReleaseSubtitleImages(EventSubtitleImages *pImages)
  {
 	 assert(NULL != pImages);
-	 for (int i = 0; i < pImages->mFontFamilysCount; ++ i)
+	 /*for (int i = 0; i < pImages->mFontFamilysCount; ++ i)
 	 {
 		 std::map<wchar_t, LPRImage*> &wchar2image = pImages->mWCharImageMapArray[i];
 		 for (std::map<wchar_t, LPRImage*>::iterator it = wchar2image.begin(), e = wchar2image.end(); it != e; ++ it)
@@ -296,12 +321,30 @@ EventSubtitleImages* __stdcall LPRGenerateCharacterImagesDat(const wchar_t *subt
 	 {
 		 delete []pImages->mWCharImageMapArray;
 		 pImages->mWCharImageMapArray = NULL;
+	 }*/
+	 if (pImages->mImages != NULL)
+	 {
+		 for (int i = 0; i < pImages->mFontFamilysCount; ++ i)
+		 {
+			 for (int j = 0; j < pImages->mSubtitleCount; ++ j)
+				 LPRReleaseImage(pImages->mImages[i][j]);
+			 delete []pImages->mImages[i];
+		 }
+		 delete []pImages->mImages;
+		 pImages->mImages = NULL;
+	 }
+	 if (pImages->mSubtitle != NULL)
+	 {
+		 delete []pImages->mSubtitle;
+		 pImages->mSubtitle = NULL;
 	 }
 	 if (pImages->mFontFamilys != NULL)
 	 {
 		 delete []pImages->mFontFamilys;
 		 pImages->mFontFamilys = NULL;
-	 }	
+	 }
+	 pImages->mSubtitleCount = 0;
+	 pImages->mFontFamilysCount = 0;
  }
 
 /**
@@ -330,8 +373,23 @@ static LPRImage* __stdcall LPRGetCharacterImage(const EventSubtitleImages *pImag
 		printf("Could not find font family %d.\n", fontParam.mFontFamily);
 		return NULL;
 	}
-
-	LPRImage *pWCharImage = pImages->mWCharImageMapArray[fontFamilyIndex].find(wch)->second;
+	// 得到字库索引
+	int subtitleIndex = -1;
+	for (int i = 0; i < pImages->mSubtitleCount; ++ i)
+	{
+		if (wch == pImages->mSubtitle[i])
+		{
+			subtitleIndex = i;
+			break;
+		}
+	}
+	if (-1 == subtitleIndex)
+	{
+		printf("Could not find wchar %lc.\n", wch);
+		return NULL;
+	}
+	//LPRImage *pWCharImage = pImages->mWCharImageMapArray[fontFamilyIndex].find(wch)->second;
+	LPRImage *pWCharImage = pImages->mImages[fontFamilyIndex][subtitleIndex];
 
 	// 进行缩放
 	float zoomRatio = fontParam.mFontSize/100.0f;
@@ -392,10 +450,18 @@ static bool __stdcall LPROverlaySubtitle(LPRImage *pImBackground, const wchar_t*
 		wcsupr(upperSubtitle);
 
 		// 前提是有字幕图片生成
-		const std::map<wchar_t, LPRImage*> &wchar2image = pImages->mWCharImageMapArray[0];
+		/*const std::map<wchar_t, LPRImage*> &wchar2image = pImages->mWCharImageMapArray[0];
 		for (int i = 0; i < wstrSize; ++ i)
 		{
-			if (wchar2image.find(upperSubtitle[i]) == wchar2image.end())
+		if (wchar2image.find(upperSubtitle[i]) == wchar2image.end())
+		{
+		printf("There is not corresponding image for %lc\n", upperSubtitle[i]);
+		return false;
+		}
+		}*/
+		for (int i = 0; i <wstrSize; ++ i)
+		{
+			if (wcschr(pImages->mSubtitle, upperSubtitle[i]) == NULL)
 			{
 				printf("There is not corresponding image for %lc\n", upperSubtitle[i]);
 				return false;
