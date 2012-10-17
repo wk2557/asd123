@@ -70,7 +70,7 @@ public:
 
 private:
 	
-	APPRESULT ConstructResult(int iObjectBreakRule, int iRuleType,int uid, EventMultiAPPResult* opResultMulti, int& orResultCount);
+	APPRESULT ConstructResult(int iObjectBreakRule, int iRuleType,int uid, int startIndex, EventMultiAPPResult* opResultMulti, int& orResultCount);
 	// We don't want user to copy this object
 	EventAPP(const EventAPP&);
 	EventAPP& operator=(const EventAPP&);

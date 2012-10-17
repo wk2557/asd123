@@ -193,7 +193,6 @@ typedef std::map<int, int> StatusMap;
 struct PoolData
 {
 	StatusMap mBreakRules;
-	int mLoop;
 	LPRImage* mpImage;
 };
 
@@ -207,6 +206,7 @@ typedef std::map<int, int> PriorityMap;
 typedef std::map<int, int> RecordMap;
 typedef std::map<int, int> TouchMap;
 typedef std::map<int, int> LoopMap;
+//typedef std::map<int, int> LightMap;
 
 
 EventAPP::EventAPP()
@@ -266,6 +266,7 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	*(pValue + 20) = new int(maxAhead);
 	*(pValue + 21) = (int*)new TouchMap;
 	*(pValue + 22) = (int*)new LoopMap;
+	//*(pValue + 22) = (int*)new LightMap;
 	return APP_OK;
 }
 
@@ -321,6 +322,7 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 	int* pStartFrameIndex = (int*)(*(pValue + 20));
 	TouchMap* pTouchMap = (TouchMap*)(*(pValue + 21));
 	LoopMap* pLoopMap = (LoopMap*)(*(pValue + 22));
+	//LoopMap* pLightMap = (LightMap*)(*(pValue + 23));
 	
 
 	// 得到VSDEventParam的参数
@@ -623,7 +625,6 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 		else
 			lMaxPriority = 0;
 		lPoolData.mBreakRules[lObject.uid] = VSD_BR_NONE;
-		lPoolData.mLoop = lObject.nLoopID;
 		// 判断是否闯红灯
 		if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_RED_LIGHT]] == EVENT_APP_RULE_SWITCH_ON && isRedLightOn[lObject.nLoopID] == EVENT_APP_LIGHT_RED  && GetCrossRatio(pAPPParam->mStopLine, objectRatioRECT) >= crossRatio)
 		{
@@ -767,23 +768,27 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 	pPool->push_back(lPoolData);
 	if (pPool->size() > (*pPoolLength + 1))
 	{
-		// 释放掉队列头已不再需要录像的缓存的图片
-		PoolData lCheckPoolData = pPool->front();
-		LPRReleaseImage(lCheckPoolData.mpImage);
-		pPool->pop_front();
-		lCheckPoolData = pPool->at(*pStartFrameIndex);
-		// 遍历当前poolData中的所有object的违章记录
-		for(std::map<int, int>::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
+		PoolData lCheckPoolData;
+		for(int startIndex = 0; startIndex < *pStartFrameIndex; ++startIndex)
 		{
-			ConstructResult(itObject->second, VSD_BR_NONE, itObject->first, opResult, lResultCount);
-			ConstructResult(itObject->second, VSD_BR_TURN_LEFT, itObject->first, opResult, lResultCount);
-			ConstructResult(itObject->second, VSD_BR_TURN_RIGHT, itObject->first, opResult, lResultCount);
-			ConstructResult(itObject->second, VSD_BR_STRAIGHT_THROUGH, itObject->first, opResult, lResultCount);
-			ConstructResult(itObject->second, VSD_BR_CROSS_LANE, itObject->first, opResult, lResultCount);
-			ConstructResult(itObject->second, VSD_BR_REVERSE, itObject->first, opResult, lResultCount);
-			ConstructResult(itObject->second, VSD_BR_RED_LIGHT, itObject->first, opResult, lResultCount);
-			ConstructResult(itObject->second, VSD_BR_STOP, itObject->first, opResult, lResultCount);
-			
+			lCheckPoolData  = pPool->at(startIndex);
+			// 遍历当前poolData中的所有object的违章记录
+			for(StatusMap::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
+			{
+				ConstructResult(itObject->second, VSD_BR_NONE, itObject->first, startIndex, opResult, lResultCount);
+				ConstructResult(itObject->second, VSD_BR_TURN_LEFT, itObject->first, startIndex, opResult, lResultCount);
+				ConstructResult(itObject->second, VSD_BR_TURN_RIGHT, itObject->first, startIndex, opResult, lResultCount);
+				ConstructResult(itObject->second, VSD_BR_STRAIGHT_THROUGH, itObject->first, startIndex, opResult, lResultCount);
+				ConstructResult(itObject->second, VSD_BR_CROSS_LANE, itObject->first, startIndex, opResult, lResultCount);
+				ConstructResult(itObject->second, VSD_BR_REVERSE, itObject->first, startIndex, opResult, lResultCount);
+				ConstructResult(itObject->second, VSD_BR_RED_LIGHT, itObject->first, startIndex, opResult, lResultCount);
+				ConstructResult(itObject->second, VSD_BR_STOP, itObject->first, startIndex, opResult, lResultCount);
+			}
+		}
+		
+		lCheckPoolData = pPool->front();
+		for(StatusMap::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
+		{
 			// 清除不在需要的数据
 			int lShowUp = 0;
 			for(int i = *pStartFrameIndex + 1; i < pPool->size(); ++i)
@@ -812,9 +817,9 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 				RectMap::iterator itRect = pRectMap->find(itObject->first);
 				if (itRect != pRectMap->end())
 					pRectMap->erase(itRect);
-				RecordMap::iterator itRecord = pRecordMap->find(itObject->first);
-				if(itRecord != pRecordMap->end())
-					pRecordMap->erase(itRecord);
+				//RecordMap::iterator itRecord = pRecordMap->find(itObject->first);
+				//if(itRecord != pRecordMap->end())
+				//	pRecordMap->erase(itRecord);
 
 				TouchMap::iterator itTouchStopLine = pTouchMap->find(itObject->first);
 				if (itTouchStopLine != pTouchMap->end())
@@ -852,11 +857,15 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 				}
 			}
 		}
+		// 释放掉队列头已不再需要录像的缓存的图片
+		//PoolData lCheckPoolData = pPool->front();
+		LPRReleaseImage(pPool->front().mpImage);
+		pPool->pop_front();
 	}
 	return APP_OK;
 }
 
-APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid, EventMultiAPPResult* opResultMulti, int& orResultCount)
+APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid, int iStartIndex, EventMultiAPPResult* opResultMulti, int& orResultCount)
 {
 	// 得到EventAPP成员指针
 	int** pValue = (int**)mObject;
@@ -874,7 +883,7 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 	RecordMap* pRecordMap = (RecordMap*)(*(pValue + 17));
 	CaptureImageMap* pTouchCentreLineImage = (CaptureImageMap*)(*(pValue + 18));
 	CaptureImageMap* pTouchVirtualLoopLineImage = (CaptureImageMap*)(*(pValue + 19));
-	int* pStartFrameIndex = (int*)(*(pValue + 20));
+	//int* pStartFrameIndex = (int*)(*(pValue + 20));
 	TouchMap* pLoopMap = (LoopMap*)(*(pValue + 22));
 
 
@@ -918,8 +927,10 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 			lAPPResult.mRect.y = 0;
 		}
 		// 填充EventAPPResult的mVideoImage信息
-		int lBeginIndex =  MaxT(*pStartFrameIndex - pAPPParam->mRecordParam.mBreakRuleAhead[(*pRuleIndexMap)[iRuleType]], 0);
-		int lEndIndex = MinT(pAPPParam->mRecordParam.mBreakRuleBehind[(*pRuleIndexMap)[iRuleType]] + *pStartFrameIndex, *pPoolLength - 1);
+		//int lBeginIndex =  MaxT(*pStartFrameIndex - pAPPParam->mRecordParam.mBreakRuleAhead[(*pRuleIndexMap)[iRuleType]], 0);
+		//int lEndIndex = MinT(pAPPParam->mRecordParam.mBreakRuleBehind[(*pRuleIndexMap)[iRuleType]] + *pStartFrameIndex, *pPoolLength - 1);
+		int lBeginIndex =  MaxT(iStartIndex - pAPPParam->mRecordParam.mBreakRuleAhead[(*pRuleIndexMap)[iRuleType]], 0);
+		int lEndIndex = MinT(pAPPParam->mRecordParam.mBreakRuleBehind[(*pRuleIndexMap)[iRuleType]] + iStartIndex, *pPoolLength - 1);
 		int lSizeToCopy = lEndIndex - lBeginIndex + 1;
 		lSizeToCopy = MinT(lSizeToCopy, MAX_FRAME_AHEAD + MAX_FRAME_BEHIND);
 		LPRImage* lpImage = NULL;
@@ -954,7 +965,8 @@ APPRESULT EventAPP::ConstructResult(int iObjectBreakRule, int iRuleType, int uid
 		}
 		else
 		{
-			lpImage = LPRCloneImage(pPool->at(*pStartFrameIndex).mpImage);
+			// lpImage = LPRCloneImage(pPool->at(*pStartFrameIndex).mpImage);
+			lpImage = LPRCloneImage(pPool->at(iStartIndex).mpImage);
 			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
 		}
 		
@@ -1644,12 +1656,8 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 
 	return APP_OK;
 }
- void __stdcall forTest()
- {
-	 int a = 0;
- }
 
- /*
+/*
 
 static bool CmpFileName(const string& a, const string& b)
 {
