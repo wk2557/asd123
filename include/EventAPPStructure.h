@@ -25,9 +25,12 @@
 
 struct EventSubtitleImages
 {
-	std::map<wchar_t, LPRImage*> *mWCharImageMapArray;	// 宽字符到其对应图像map的数组，数组维度等于字体家族个数
-	int *mFontFamilys;								// 所有的字体家族
-	int mFontFamilysCount;							// 字体家族个数
+	//std::map<wchar_t, LPRImage*> *mWCharImageMapArray;	// 宽字符到其对应图像map的数组，数组维度等于字体家族个数
+	LPRImage ***mImages;								// LPRImage*的二维数组，mImages[i][j]表示字体家族为mFontFamilys[i]，字符为mSubtitle[j]的图像
+	int *mFontFamilys;									// 所有的字体家族
+	int mFontFamilysCount;								// 字体家族个数
+	wchar_t *mSubtitle;									// 经过去重和大小写处理的字库
+	int mSubtitleCount;									// 字库长度
 };
 
 // 记录各种违章录像范围
@@ -131,6 +134,7 @@ EVENTAPP_API void __stdcall InitEventAPPParam(EventAPPParam* opEventAPPParam);
 EVENTAPP_API void __stdcall FreeMultiAPPResult(EventMultiAPPResult* ipMultiAPPResult);
 EVENTAPP_API void __stdcall FreeAPPResult(EventAPPResult* ipAPPResult);
 EVENTAPP_API void __stdcall FreeEventMedia(EventMedia *pMedia);
+EVENTAPP_API void __stdcall InitEventMultiAPPResult(EventMultiAPPResult& irEventMultiAPPResult);
 EVENTAPP_API APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ipEventParam);
 
 #endif

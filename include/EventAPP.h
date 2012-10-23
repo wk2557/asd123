@@ -70,11 +70,11 @@ public:
 
 private:
 	
-	APPRESULT ConstructResult(int iObjectBreakRule, int iRuleType,int uid, EventMultiAPPResult* opResultMulti, int& orResultCount);
-	// We don't want user to copy this object
+	//APPRESULT ConstructResult(int iObjectBreakRule, int iRuleType,int uid, int startIndex, EventMultiAPPResult* opResultMulti, int& orResultCount);
+	// 禁止拷贝和复制EventAPP
 	EventAPP(const EventAPP&);
 	EventAPP& operator=(const EventAPP&);
-	// Hide the implementation
+	// 隐藏EventAPP的实现
 	void* mObject;
 
 };
