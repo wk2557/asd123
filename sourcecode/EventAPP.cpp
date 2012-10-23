@@ -3,7 +3,7 @@
 //Author:WK
 //Data:2012.09.22`
 //**********************************************************
-//#define __DEBUG
+#define __DEBUG
 #include "EventAPP.h"
 #include "MediaConverter.h"
 #include "SubtitleOverlay.h"
@@ -381,6 +381,7 @@ APPRESULT EventAPP::Init(const EventAPPParam& irParam)
 	(*lpEventAPPImpl->mpRuleIndexMap)[VSD_BR_LOW_SPEED] = 9;
 	*/
 	lpEventAPPImpl->mpPriorityMap = new PriorityMap;
+	lpEventAPPImpl->mpRecordMap = new RecordMap;
 	lpEventAPPImpl->mpTouchCentreLineImage = new CaptureImageMap;
 	lpEventAPPImpl->mpTouchVirtualLoopLineImage = new CaptureImageMap;
 	lpEventAPPImpl->mpStartFrameIndex = new int(maxAhead);
@@ -582,11 +583,10 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 	int lObjectCount = ipObjectMulti->nObjects;
 	VSDObject lObject;
 	
-	// 因为ipImage为外部输入，我们不能保证图片何时被释放，我们需要自己拷贝一份到ImagePool
-	LPRImage *lpImage = LPRCloneImage(ipImage);
-
 	// 构造PoolData 
 	PoolData lPoolData;
+	// 因为ipImage为外部输入，我们不能保证图片何时被释放，我们需要自己拷贝一份到ImagePool
+	LPRImage *lpImage = LPRCloneImage(ipImage);
 	lPoolData.mpImage = lpImage;
 	
 	// 遍历输入的Image和ObjectMuli中的每个物体，检测每个物体的违章情况并记录到mBreakRules里
@@ -724,6 +724,7 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 			lMaxPriority = itPriorityMap->second;
 		else
 			lMaxPriority = 0;
+		
 		lPoolData.mBreakRules[lObject.uid] = VSD_BR_NONE;
 		// 判断是否闯红灯
 		//if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_RED_LIGHT]] == EVENT_APP_RULE_SWITCH_ON && isRedLightOn[lObject.nLoopID] == EVENT_APP_LIGHT_RED  && GetCrossRatio(pAPPParam->mStopLine, objectRatioRECT) >= crossRatio)
@@ -779,7 +780,7 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 		
 		// 判断是否违章直行
 		//if(pAPPParam->mRuleSwitch[(*pRuleIndexMap)[VSD_BR_STRAIGHT_THROUGH]] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(pAPPParam->mStraightLine, objectRatioRECT) >= crossRatio)
-		if(pAPPParam->mRuleSwitch[getIndex(VSD_BR_STRAIGHT_THROUGH)] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(pAPPParam->mStraightLine, objectRatioRECT) >= crossRatio)
+		if(pAPPParam->mRuleSwitch[getIndex(VSD_BR_STRAIGHT_THROUGH)] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(pAPPParam->mStraightLine, objectRatioRECT) > 0)
 		{
 #ifdef __DEBUG
 			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章直行" << lObject.nLoopID  << std::endl;
@@ -876,7 +877,8 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 	if (pPool->size() > (*pPoolLength + 1))
 	{
 		PoolData lCheckPoolData;
-		for(int startIndex = 0; startIndex < *pStartFrameIndex; ++startIndex)
+		//for(int startIndex = 0; startIndex < *pStartFrameIndex; ++startIndex)
+		for(int startIndex = *pStartFrameIndex; startIndex >= *pStartFrameIndex ; --startIndex)
 		{
 			lCheckPoolData  = pPool->at(startIndex);
 			// 遍历当前poolData中的所有object的违章记录
@@ -924,9 +926,11 @@ APPRESULT EventAPP::ProcessFrame(LPRImage *ipImage, const VSDObjectMulti* ipObje
 				RectMap::iterator itRect = pRectMap->find(itObject->first);
 				if (itRect != pRectMap->end())
 					pRectMap->erase(itRect);
+				/*
 				RecordMap::iterator itRecord = pRecordMap->find(itObject->first);
 				if(itRecord != pRecordMap->end())
 					pRecordMap->erase(itRecord);
+					*/
 
 				TouchMap::iterator itTouchStopLine = pTouchMap->find(itObject->first);
 				if (itTouchStopLine != pTouchMap->end())
@@ -1102,7 +1106,7 @@ APPRESULT EventAPPImpl::ConstructResult(int iObjectBreakRule, int iRuleType, int
 EventAPP::~EventAPP()
 {
 	//int** pValue = (int**)mObject;
-	EventAPPImpl* lpEventAPPImpl;
+	EventAPPImpl* lpEventAPPImpl = (EventAPPImpl*)mObject;
 	EventAPPParam* pAPPParam = lpEventAPPImpl->mpEventAPPParam;//(EventAPPParam*)(*pValue);
 	ImagePool* pPool = lpEventAPPImpl->mpImagePool;//(ImagePool*)(*(pValue + 1));
 	VSDRatioLine* laneMark = lpEventAPPImpl->mpLaneMark;//(VSDRatioLine*)(*(pValue + 2));
@@ -1214,8 +1218,8 @@ APPRESULT EventAPP::AddSubTitle(LPRImage* ipImage, const EventSubtitleOverlay& i
 #endif
 		return APP_INPUT_NULL_POINTER;
 	}
-	int** pValue = (int**)mObject;
-	EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
+	//int** pValue = (int**)mObject;
+	//EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
 	//SubtitleOverlay* pSubtitleOverlay;
 	//*oppImage = pSubtitleOverlay->overlaySubtitle(ipImage, ipString, pEventParam->mFont);
 	*oppImage = LPROverlaySubtitle(ipImage, irSubTitleOverlay, ipSubtitleImages);
@@ -1234,9 +1238,10 @@ APPRESULT EventAPP::SynthesisImages(LPRImage** ipImage, int iNumOfImages, const 
 		return APP_INPUT_NULL_POINTER;
 	}
 
-	int** pValue = (int**)mObject;
-	EventAPPParam* pEventParam = (EventAPPParam*)(*pValue);
-	ImageSynthesis* pImageSynthesis = (ImageSynthesis*)(*(pValue + 13));
+	//int** pValue = (int**)mObject;
+	EventAPPImpl* lpEventAPPImpl = (EventAPPImpl*)mObject;
+	EventAPPParam* pEventParam = lpEventAPPImpl->mpEventAPPParam;// (EventAPPParam*)(*pValue);
+	ImageSynthesis* pImageSynthesis = lpEventAPPImpl->mpImageSynthesis;//(ImageSynthesis*)(*(pValue + 13));
 	pEventParam->mImageSynthesis.mNumberofImage = iNumOfImages;
 	*oppImage = pImageSynthesis->synthesis(ipImage, pEventParam->mImageSynthesis, irRect);
 	if (*oppImage == NULL)
@@ -1755,4 +1760,172 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 		return lAPPResult;
 
 	return APP_OK;
+}
+
+static bool CmpFileName(const string& a, const string& b)
+{
+	return a.length() == b.length() ? a < b : a.length() < b.length();
+}
+
+
+
+
+void EmumAllJPGFileInFolder(std::wstring folder, std::vector<std::wstring>& files)
+{
+	wstring imgPath = folder;
+	folder += L"\\*.*";
+	WIN32_FIND_DATA		findData;
+	//wchar_t pFolder[256];
+	//str2wstr(pFolder, folder.c_str(), folder.size());
+	HANDLE  hFirstFile = ::FindFirstFile(folder.c_str(), &findData );
+	if( hFirstFile != INVALID_HANDLE_VALUE )
+	{
+		do
+		{
+			wstring fileName( findData.cFileName );
+			int pos = fileName.find_last_of(L'.' );
+			if( pos != -1 )
+			{
+				wstring ext = fileName.substr(pos+1, fileName.length()-pos);
+				/// 寻找jpeg文件
+				if( ext == L"jpg" || ext == L"JPG" || ext == L"jpeg" || ext == L"JPEG")
+				{
+					files.push_back( imgPath + L"\\" + findData.cFileName );
+				}
+			}
+
+		}while( FindNextFile( hFirstFile, &findData ) );
+
+		::FindClose( hFirstFile );
+	}
+	//std::sort(files.begin(), files.end(), CmpFileName);
+}
+
+int main(int argc, char *argv[])
+{
+	VSDEventParam lParam;	
+	VSDEvent_LoadParam("F:\\EventData\\images\\120327\\VSDEvent.ini", &lParam);
+	VSDEvent lEvent;
+	LPRRESULT l = lEvent.Init(lParam);
+	EventAPP lEventApp;
+	EventAPPParam lAPPParam;
+	//////////////////////////////////////////////////////////////////////////
+	InitEventAPPParam(&lAPPParam);
+	lAPPParam.mVSDParam = lParam;
+	EventAPP_LoadParam("E:\\work\\EventAPP\\EventAPP\\EventAPP\\EvenAPP_Param.ini", &lAPPParam);
+	lEventApp.Init(lAPPParam);
+	std::wstring fileDir(L"F:\\EventData\\images\\120327");
+	std::vector<wstring> lFiles;
+	EmumAllJPGFileInFolder(fileDir, lFiles);
+	wstring fileName;
+	time_t tBegin;
+	tBegin = time(NULL);
+	//////////////////////////////////////////////////////////////////////////
+	EventSubtitleImages* pEventSubtitleIamge;
+	int font[2] = {0,1};
+	pEventSubtitleIamge = LPRGenerateCharacterImagesDat(L"1234567890km", font, 2, 128);
+	for(vector<wstring>::iterator it = lFiles.begin(); it != lFiles.end(); ++it)
+	{
+		fileName = *it;
+		std::ifstream ifs(fileName.c_str(), std::ios::binary);
+		int nJpgLen = 0;
+		char *pJpgBuf = NULL;
+		if ( ifs.is_open() )
+		{
+			ifs.seekg( 0 , std::ios::end );
+			nJpgLen = ifs.tellg();
+
+			if ( nJpgLen > 0 )
+			{
+				pJpgBuf = new char [nJpgLen];
+				ifs.seekg( 0 , std::ios::beg );
+				ifs.read((char *)pJpgBuf, nJpgLen);
+			}
+			ifs.close();
+		}
+
+		LPRImage imgJPG;
+		imgJPG.nColorMode = CS_JPEG;
+		imgJPG.pData = (unsigned char *)pJpgBuf;
+		imgJPG.imageSize = nJpgLen;
+		imgJPG.info.nCamID = 0;
+
+		EventMultiAPPResult lAPPResult;
+		InitEventMultiAPPResult(lAPPResult);
+		VSDObjectMulti lObjectMulti;
+		LPRRESULT lResult = lEvent.ProcessFrame(&imgJPG, &lObjectMulti);
+		VSDObjectTrackMulti lObjectTrackMulti;
+		VSDObjectTrackMulti_Init(&lObjectTrackMulti);
+		int lLights[MAX_VIRTUAL_LOOPS] = {1, 1, 1, 1};
+		lResult = lEvent.GetAllTracks(&lObjectTrackMulti);
+		lEventApp.ProcessFrame(&imgJPG,&lObjectMulti, &lObjectTrackMulti, lLights, &lAPPResult);
+		wchar_t resultFileName[256];
+		char* buf;
+		ofstream ofs;
+		EventSubtitleOverlay lSubTitleOverlay;
+		EventFont lFont[2] = {{50, 0, 255, 0, 0, 1, 500, 200}, {80, 1, 0, 0, 255, 0, 800, 300}};
+		lSubTitleOverlay.mFonts = lFont;
+		lSubTitleOverlay.mFontSize = 2;
+		wchar_t* lSubtiles[2] = {L"京123", L"津456"};
+		lSubTitleOverlay.mSubtitles = lSubtiles;
+		lSubTitleOverlay.mSubtitleSize = 2;
+
+		for(int i = 0; i < lAPPResult.mNumOfResult; ++i)
+		{
+			EventAPPResult lResult = lAPPResult.mppAPPResult[i];
+			if (lResult.mBreakRule == VSD_BR_NONE)
+			{
+				if (lResult.mNumOfSynthesisImage > 0)
+				{
+					swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_车道%d_车牌%ls.jpg", lResult.mID, lResult.mLoopID, lResult.mPlate);
+					ofs.open(resultFileName, std::ios::binary);
+					ofs.write((const char*)lResult.mSynthesisImage[0]->pData, lResult.mSynthesisImage[0]->imageSize);
+					ofs.close();
+				}
+			}
+			else
+			{
+				if (lResult.mNumOfSynthesisImage == 3)
+				{
+					swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_违反%d_车道%d_车牌%ls.jpg", lResult.mID, lResult.mBreakRule, lResult.mLoopID, lResult.mPlate);
+					ofs.open(resultFileName, std::ios::binary);
+					LPRImage* lpImage = NULL;
+					APPRESULT retCode = lEventApp.SynthesisImages(lResult.mSynthesisImage, lResult.mNumOfSynthesisImage, lResult.mRect, &lpImage);
+					buf = new char[10 * nJpgLen]; 
+					int length;
+					LPREncodeImage(lpImage, (unsigned char*)buf, &length,LPR_ENCODE_FORMAT_JPG, 40);
+					LPRImage* pSubtitleImage = new LPRImage;
+
+					pSubtitleImage->pData = (unsigned char*) buf;
+					pSubtitleImage->imageSize = length;
+					LPRImage* lpImageSubtile;
+					lEventApp.AddSubTitle(pSubtitleImage,lSubTitleOverlay, pEventSubtitleIamge, &lpImageSubtile);
+					LPREncodeImage(lpImageSubtile, (unsigned char*)buf, &length,LPR_ENCODE_FORMAT_JPG, 80);
+					ofs.write((const char*)buf, length);
+					ofs.close();
+					delete[] buf;
+					LPRReleaseImage(lpImage);
+					LPRReleaseImage(lpImageSubtile);
+					delete pSubtitleImage;
+				}
+				/*
+				EventMedia lMedia;
+				lEventApp.Convert2Media(lResult.mVideoImage, lResult.mNumOfVideoImage, lMedia);
+				swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_违反%d_车道%d_车牌%ls.avi", lResult.mID, lResult.mBreakRule, lResult.mLoopID, lResult.mPlate);
+				ofs.open(resultFileName, std::ios::binary);
+				ofs.write((const char*)lMedia.mBufferPtr, lMedia.mBufferSize);
+				ofs.close();
+				FreeEventMedia(&lMedia);
+				*/
+			}
+		}
+		delete[] pJpgBuf;
+		FreeMultiAPPResult(&lAPPResult);
+	}
+	time_t tEnd = time(NULL);
+	cout << "运行" << (tEnd - tBegin) / 60 << "分" << (tEnd - tBegin)%60 << "秒" << endl;
+	LPRReleaseSubtitleImages(pEventSubtitleIamge);
+	int i;
+	std::cin >> i;
+	return 0;
 }
