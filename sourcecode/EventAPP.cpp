@@ -1644,10 +1644,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 
 	return APP_OK;
 }
- void __stdcall forTest()
- {
-	 int a = 0;
- }
+
 
  /*
 
