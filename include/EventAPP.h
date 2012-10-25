@@ -35,12 +35,12 @@ extern "C"{
 class EVENTAPP_API EventAPP
 {
 public:
-	EventAPP();
+	EventAPP(const EventAPPParam& irParam);
 	~EventAPP();
 
 	// 初始化EventAPP，在调用其他接口函数之前，此函数应该已经调用过
 	// 输入参数 irParam: 表示EventAPP需要的参数设置，见EventAPPParam的表述
-	APPRESULT Init(const EventAPPParam& irParam);
+	// APPRESULT Init(const EventAPPParam& irParam);
 
 	// 处理图片流的主要接口。
 	// 输入参数 ipImage: 要处理的图像指针
