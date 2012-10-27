@@ -550,7 +550,7 @@ static bool __stdcall LPROverlaySubtitle(LPRImage *pImBackground, const wchar_t*
 //static LPRMutex globalMutex;
 //static LPRImageDecoder globalImageDecoder;
 
-LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages)
+LPRImage* __stdcall LPROverlaySubtitle(const LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages)
 {
 	//LPRMutexLocker locker(&globalMutex);	// 加锁，因为多个线程之间共享缓冲区
 	assert(subtitles.mSubtitleSize == subtitles.mFontSize);

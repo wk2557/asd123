@@ -32,7 +32,9 @@ public:
 	 * param outputFrameRate - 输出帧率
 	 * param bitRate - 输出比特率
 	 */
-	MediaConverter(EventAPPVideoFormat encoderType, int outputFrameRate = 10, int bitRate = 1000000);
+	//MediaConverter(EventAPPVideoFormat encoderType, int outputFrameRate = 10, int bitRate = 1000000);
+	MediaConverter(int outputFrameRate = 10, int bitRate = 1000000);
+	APPRESULT Init(EventAPPVideoFormat encoderType, int outputFrameRate, int bitRate);
 	virtual ~MediaConverter(void);
 	/**
 	 * 将指定的JPG码流序列，转换成流媒体（支持所有libav支持的流媒体格式，libav支持的流媒体格
