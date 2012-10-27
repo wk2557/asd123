@@ -31,6 +31,7 @@ bool LPRMutex::tryLock()
 {
 #ifdef WIN32
 	return TryEnterCriticalSection(&mMutex) == TRUE;
+	//return true;
 #else
 	return 0 == pthread_mutex_trylock(&mMutex);
 #endif

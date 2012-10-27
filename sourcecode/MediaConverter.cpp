@@ -5,6 +5,7 @@
 MediaConverter::MediaConverter(int outputFrameRate, int bitRate):
 mInputFramePtr(NULL), 
 	mInputPixFmt(PIX_FMT_NONE), 
+	mInputFmtPtr(NULL),
 	mPTS(0), 
 	mOutputFrameRate(outputFrameRate),
 	mOutputBitRate(bitRate),
@@ -156,9 +157,12 @@ bool MediaConverter::initializeInput(const LPRImage *pRawImage)
 	//mOutputHeight = pImage->height;
 	//LPRReleaseImage(pImage);
 	//// pRawImage现在还没有输出到视频，还不能释放
-	AVProbeData pd = {"fake.jpg", NULL, 0};
-	mInputFmtPtr = av_probe_input_format(&pd, 0);
-	mInputFmtPtr->flags = 0;
+	if (NULL == mInputFmtPtr)
+	{
+		AVProbeData pd = {"fake.jpg", NULL, 0};
+		mInputFmtPtr = av_probe_input_format(&pd, 0);
+		mInputFmtPtr->flags = 0;
+	}
 	AVIOContext *pIOCtx = avio_alloc_context(pRawImage->pData, pRawImage->imageSize, 0, NULL, NULL, NULL, NULL);
 	AVFormatContext *pInputFormatCtx = avformat_alloc_context();
 	pInputFormatCtx->pb = pIOCtx;
