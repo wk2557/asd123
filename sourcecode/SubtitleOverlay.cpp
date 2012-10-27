@@ -1,4 +1,6 @@
 #include "SubtitleOverlay.h"
+//#include "LPRMutex.h"
+//#include "LPRImageDecoder.h"
 #include <cassert>
 
 #ifdef WIN32
@@ -545,11 +547,14 @@ static bool __stdcall LPROverlaySubtitle(LPRImage *pImBackground, const wchar_t*
 	return false;
 }
 
+//static LPRMutex globalMutex;
+//static LPRImageDecoder globalImageDecoder;
 
 LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages)
 {
+	//LPRMutexLocker locker(&globalMutex);	// 加锁，因为多个线程之间共享缓冲区
 	assert(subtitles.mSubtitleSize == subtitles.mFontSize);
-	LPRImage *pImBackground = NULL;
+	LPRImage *pImBackground = NULL;//globalImageDecoder.decode(pRawImage);
 	LPRDecodeImage(&pImBackground, pRawImage->pData, pRawImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
 
 	for (int i = 0; i < subtitles.mSubtitleSize; ++ i)

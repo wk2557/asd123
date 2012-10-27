@@ -56,6 +56,7 @@ private:
 	void uninitializeOutput();
 	/* Êä³öÖ¡ */
 	bool outputFrame(LPRImage *pRawImage);
+	bool outputFrame();
 	bool flushFrames();
 	int64_t nextPTS()
 	{
@@ -65,6 +66,7 @@ private:
 	// Input related
 	AVFrame *mInputFramePtr;
 	PixelFormat mInputPixFmt;
+	AVInputFormat *mInputFmtPtr;
 
 	// Output related
 	int64_t mPTS;
