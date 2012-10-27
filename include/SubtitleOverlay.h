@@ -64,13 +64,14 @@ EVENTAPP_API EventSubtitleImages*  __stdcall LPRGenerateCharacterImagesDat(const
 EVENTAPP_API void LPRReleaseSubtitleImages(EventSubtitleImages *pImages);
 
 /**
-  * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。 
+  * 给指定的图片在指定的位置添加指定的字幕，并另存为一张新的图片，该方法不会改变原来图片的内容。
+  * 
   *
   * param pRawImage - 以JPG格式编码过的图像（目前仅支持JPG码流输入）
   * param subtitles - 字幕内容，具体含义参考EventSubtitleOverlay结构定义。
   * param pImages - 图片库
   *
-  * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
+  * return 成功，则返回生成的图像，返回的图像内存需要调用者自己释放，失败则返回NULL。
   */
 LPRImage* __stdcall LPROverlaySubtitle(const LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages);
 
