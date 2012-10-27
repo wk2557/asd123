@@ -25,8 +25,6 @@ class MediaConverter
 public:
 	static const PixelFormat DEFAULT_PIX_FMT = PIX_FMT_YUV420P; 
 public:
-	MediaConverter(int outputFrameRate = 10, int bitRate = 1000000);
-	APPRESULT Init(EventAPPVideoFormat encoderType, int outputFrameRate, int bitRate);
 	/**
 	 * 根据指定参数构造一个媒体转换器。
 	 * 
@@ -34,7 +32,9 @@ public:
 	 * param outputFrameRate - 输出帧率
 	 * param bitRate - 输出比特率
 	 */
-//	MediaConverter(EventAPPVideoFormat encoderType, int outputFrameRate = 10, int bitRate = 1000000);
+	//MediaConverter(EventAPPVideoFormat encoderType, int outputFrameRate = 10, int bitRate = 1000000);
+	MediaConverter(int outputFrameRate = 10, int bitRate = 1000000);
+	APPRESULT Init(EventAPPVideoFormat encoderType, int outputFrameRate, int bitRate);
 	virtual ~MediaConverter(void);
 	/**
 	 * 将指定的JPG码流序列，转换成流媒体（支持所有libav支持的流媒体格式，libav支持的流媒体格
@@ -57,7 +57,8 @@ private:
 	void uninitializeInput();
 	void uninitializeOutput();
 	/* 输出帧 */
-	bool outputFrame(const LPRImage *pRawImage);
+	bool outputFrame(LPRImage *pRawImage);
+	bool outputFrame();
 	bool flushFrames();
 	int64_t nextPTS()
 	{
@@ -67,6 +68,7 @@ private:
 	// Input related
 	AVFrame *mInputFramePtr;
 	PixelFormat mInputPixFmt;
+	AVInputFormat *mInputFmtPtr;
 
 	// Output related
 	int64_t mPTS;

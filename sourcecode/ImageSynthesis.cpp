@@ -2,6 +2,15 @@
 #include "SubtitleOverlay.h"
 #include <cassert>
 
+ImageSynthesis::ImageSynthesis()
+{
+}
+
+ImageSynthesis::~ImageSynthesis()
+{
+}
+
+/*
 LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynthesis &synthesisParam, const VSDRect &vsrRect)
 {
 	assert(synthesisParam.mNumberofImage > 0);
@@ -110,6 +119,100 @@ LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynt
 	// 释放小图
 	for (int i = 0; i < imageCount; ++ i)
 		LPRReleaseImage(pImages[i]);
+	delete []pImages;
+
+	return pLargeImg;
+}
+*/
+
+LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynthesis &synthesisParam, const VSDRect &vsrRect)
+{
+	LPRMutexLocker locker(&mMutex);	// 加锁，多线程安全
+
+	assert(synthesisParam.mNumberofImage > 0);
+	// TODO 检查图像宽高一致 需要保证输入的图像是一致的
+	// 先解码JPG流得到BGR24的图像
+	LPRImage *pImage = mImageDecoder.decode(pRawImages[0]);
+	LPRImage *pFocusImage = genFocusImage(pImage, vsrRect);
+	//////////////////////////////////////////////////////////////////////////
+	// 取得局部图像之后，图像的张数
+	int imageCount = synthesisParam.mNumberofImage + 1;
+	int littleImgWidth = pImage->width;
+	int littleImgHeight = pImage->height;
+	int littleImgDepth = pImage->depth;
+	int littleImgChannels = pImage->nChannels;
+	int largeImgWidth = 0;
+	int largeImgHeight = 0;
+	LPRImage *pLargeImg = NULL;
+	switch (synthesisParam.mPicOrientation)
+	{
+	case EVENT_APP_PIC_VERTICAL:
+		{
+			largeImgWidth = littleImgWidth;
+			largeImgHeight = imageCount * littleImgHeight;
+			pLargeImg = LPRCreateImage(largeImgWidth, largeImgHeight, littleImgDepth, littleImgChannels);
+		}
+		break;
+	case EVENT_APP_PIC_HORIZONTAL:
+		{
+			largeImgWidth = imageCount * littleImgWidth;
+			largeImgHeight = littleImgHeight;
+			pLargeImg = LPRCreateImage(largeImgWidth, largeImgHeight, littleImgDepth, littleImgChannels);
+		}
+		break;
+	case EVENT_APP_PIC_GRID:
+		{
+			if (imageCount % 2 == 0)
+			{
+				largeImgWidth = 2 * littleImgWidth;
+				largeImgHeight = imageCount/2 * littleImgHeight;
+				pLargeImg = LPRCreateImage(largeImgWidth, largeImgHeight, littleImgDepth, littleImgChannels);
+			}
+			else
+			{
+				printf("Unsupported synthesis option grid with the odd number of images.\n");
+				return NULL;
+			}
+		}
+		break;
+	default:
+		printf("Unsupported image orientation.\n");
+		return NULL;
+	}
+	// 大图和参数设置位置，开始生成
+	// 第一张图像已经解压过了
+	int i = 0;
+	RECT r;
+	calculateRect(r, synthesisParam.mPicOrientation, littleImgWidth, littleImgHeight, i);
+	LPRCopySubImageToLarge(pImage, pLargeImg, r);
+	++ i;
+	// 第二张到最后一张rawImage
+	for (; i < imageCount - 1; ++ i)
+	{
+		calculateRect(r, synthesisParam.mPicOrientation, littleImgWidth, littleImgHeight, i);
+		pImage = mImageDecoder.decode(pRawImages[i]);
+		LPRCopySubImageToLarge(pImage, pLargeImg, r);
+	}
+	// focusImage
+	calculateRect(r, synthesisParam.mPicOrientation, littleImgWidth, littleImgHeight, i);
+	LPRCopySubImageToLarge(pFocusImage, pLargeImg, r);
+	/*char savePath[256];
+	_snprintf(savePath, 256, "d:\\syn_image_g.jpg");
+	LPRSaveImage(pLargeImg, savePath);*/
+
+	// 如果生成了大图，并且需要进行缩放
+	if (NULL != pLargeImg && synthesisParam.mZoomRatio != 100)
+	{
+		int nTargetWidth = (int)((float)pLargeImg->width * synthesisParam.mZoomRatio / 100 + 0.5f);
+		int nTargetHeight = (int)((float)pLargeImg->height * synthesisParam.mZoomRatio / 100 + 0.5f);
+		LPRImage* pImTextResized = LPRCreateImage(nTargetWidth, nTargetHeight, pLargeImg->depth, pLargeImg->nChannels);
+		LPRResizeImage(pLargeImg, pImTextResized);
+		LPRReleaseImage(pLargeImg);
+		pLargeImg = pImTextResized;
+	}
+
+	// 释放focusImage
+	LPRReleaseImage(pFocusImage);
 
 	return pLargeImg;
 }
@@ -179,4 +282,35 @@ LPRImage* ImageSynthesis::genFocusImage(const LPRImage *pSrcImage, const VSDRect
 	LPRReleaseImage(pFocusImage);
 
 	return pResultImage;
+}
+
+void ImageSynthesis::calculateRect(RECT &rect, int orien, int w, int h, int imgIndex)
+{
+	switch (orien)
+	{
+	case EVENT_APP_PIC_VERTICAL:
+		{
+			rect.left = 0;
+			rect.top  = imgIndex * h; 
+			rect.right = rect.left + w;
+			rect.bottom = rect.top + h;
+		}
+		break;
+	case EVENT_APP_PIC_HORIZONTAL:
+		{
+			rect.left = imgIndex * w;
+			rect.top  = 0; 
+			rect.right = rect.left + w;
+			rect.bottom = rect.top + h;
+		}
+		break;
+	case EVENT_APP_PIC_GRID:
+		{
+			rect.left = (imgIndex%2) * w;
+			rect.top  = (imgIndex/2) * h; 
+			rect.right = rect.left + w;
+			rect.bottom = rect.top + h;
+		}
+		break;
+	}
 }
