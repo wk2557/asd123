@@ -2,6 +2,53 @@
 #include <stdio.h>
 #include <cassert>
 
+MediaConverter::MediaConverter(int outputFrameRate, int bitRate):
+	mInputFramePtr(NULL), 
+	mInputPixFmt(PIX_FMT_NONE), 
+	mPTS(0), 
+	mOutputFrameRate(outputFrameRate),
+	mOutputBitRate(bitRate),
+	mOutputWidth(-1),
+	mOutputHeight(-1), 
+	//mOutputCodecId(AVCodecID(encoderType)), 
+	mOutputPixFmt(PIX_FMT_NONE), 
+	mOutputFormatCtxPtr(NULL),
+	mOutputStreamPtr(NULL), 
+	mOutputCodecCtxPtr(NULL), 
+	mOutputFramePtr(NULL), 
+	mEncodeBuff(NULL),
+	mEncodeBuffSize(-1),
+	mSwsContextPtr(NULL),
+	isOutputBuffered(false)
+{
+	
+}
+
+APPRESULT MediaConverter::Init(EventAPPVideoFormat encoderType, int outputFrameRate, int bitRate)
+{
+	static bool libavInited = false;
+	if (!libavInited)
+	{
+		av_register_all();
+		libavInited = false;
+	}
+	switch (encoderType)
+	{
+	case EVENT_APP_VIDEO_MJPG:
+		mOutputCodecId = AV_CODEC_ID_MJPEG;
+		break;
+	case EVENT_APP_VIDEO_H264:
+		mOutputCodecId = AV_CODEC_ID_H264;
+		break;
+	default:
+		break;
+	}
+	mOutputFrameRate = outputFrameRate;
+	mOutputBitRate = bitRate;
+	return APP_OK;
+}
+
+/*
 MediaConverter::MediaConverter(EventAPPVideoFormat encoderType, int outputFrameRate, int bitRate) 
 	: mInputFramePtr(NULL), 
 	mInputPixFmt(PIX_FMT_NONE), 
@@ -39,6 +86,7 @@ MediaConverter::MediaConverter(EventAPPVideoFormat encoderType, int outputFrameR
 		break;
 	}
 }
+*/
 
 MediaConverter::~MediaConverter(void)
 {
@@ -251,7 +299,7 @@ void MediaConverter::uninitializeOutput()
 	isOutputBuffered = false;
 }
 
-bool MediaConverter::outputFrame(LPRImage *pRawImage)
+bool MediaConverter::outputFrame(const LPRImage *pRawImage)
 {
 	// ÏÈ½âÂëJPGÂëÁ÷
 	LPRImage *pImage = NULL;

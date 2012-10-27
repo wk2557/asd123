@@ -72,6 +72,6 @@ EVENTAPP_API void LPRReleaseSubtitleImages(EventSubtitleImages *pImages);
   *
   * return 成功，则返回生成的图像，图像内存需要使用者自己释放，失败则返回NULL。
   */
-LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages);
+LPRImage* __stdcall LPROverlaySubtitle(const LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages);
 
 #endif //SUBTITLEOVERLAY_H

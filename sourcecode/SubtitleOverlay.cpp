@@ -546,7 +546,7 @@ static bool __stdcall LPROverlaySubtitle(LPRImage *pImBackground, const wchar_t*
 }
 
 
-LPRImage* __stdcall LPROverlaySubtitle(LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages)
+LPRImage* __stdcall LPROverlaySubtitle(const LPRImage *pRawImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages *pImages)
 {
 	assert(subtitles.mSubtitleSize == subtitles.mFontSize);
 	LPRImage *pImBackground = NULL;
