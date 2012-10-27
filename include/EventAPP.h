@@ -39,6 +39,7 @@ EVENTAPP_API APPRESULT __stdcall EventAPP_ProcessFrame(void* ipObject, const LPR
 EVENTAPP_API APPRESULT __stdcall EventAPP_AddSubTitle(void* ipObject, const LPRImage* ipImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages* ipSubtitleImages ,LPRImage** oppImage);
 EVENTAPP_API APPRESULT __stdcall EventAPP_SynthesisImages(void* ipObject, LPRImage** ipImage, int iNumOfImages, const VSDRect& irRect, LPRImage** oppImage);
 EVENTAPP_API APPRESULT __stdcall EventAPP_Convert2Media(void* ipObject, LPRImage** ipImage, int iNumOfImages, EventMedia& orMedia);
+EVENTAPP_API APPRESULT __stdcall EventAPP_GetPlate(void* ipObject, const LPRImage* ipImage, const VSDRect& irRect, wchar_t oPlate[LPR_PLATE_STR_LEN]);
 
 // EventAPP 处理图片序列并得到车辆的违章信息，输出有违章的图片序列
 class EVENTAPP_API EventAPP
@@ -90,6 +91,14 @@ public:
 	APPRESULT Convert2Media(LPRImage** ipImage, int iNumOfImages, EventMedia& orMedia)
 	{
 		return EventAPP_Convert2Media(mObject, ipImage, iNumOfImages, orMedia);
+	}
+
+	// 车牌识别
+	// 输入参数 ipImage: 指向输入图片
+	// 输入参数 irRect: 物体所在图片中的位置	
+	APPRESULT GetPlate(const LPRImage* ipImage, const VSDRect& irRect, wchar_t oPlate[LPR_PLATE_STR_LEN])
+	{
+		return EventAPP_GetPlate(mObject, ipImage, irRect, oPlate);
 	}
 
 private:

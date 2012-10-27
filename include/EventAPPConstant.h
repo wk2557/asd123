@@ -56,6 +56,7 @@ typedef int APPRESULT;
 #define APP_CONFIG_PARAM_FAULT			-5		// 失败，原因是配置文件里参数格式不对
 #define APP_VSD_PARAM_FAULT				-6		// 失败，原因是VSD配置参数不对
 #define APP_IMAGE_FORMAT_FAULT			-7		// 失败，原因是输入文件的格式不对
+#define APP_LPR_NOT_INITED				-8      // 失败，原因是LPR尚未初始化
 
 
 #define RULE_TYPES						10		// 违反规则的个数，不包括VSD_BR_NONE
@@ -66,6 +67,6 @@ typedef int APPRESULT;
 #define DEFAULT_NUMBER_PLATE			1		// 车牌的数目，供车牌识别用
 #define MAX_CHARACTOR_NUM				100     // 字幕中最大的字符数目
 #define MAX_SYNTHESIS_NUM				3		// 合成大图片的原图片最多数目
-#define DEFAULT_EXTRA_IMAGE_BUFFER		30	
+#define DEFAULT_EXTRA_IMAGE_BUFFER		100	
 
 #endif
