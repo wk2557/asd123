@@ -68,7 +68,7 @@ extern "C"{
 	public:
 		EventAPPImpl();
 		APPRESULT Init(const EventAPPParam& irParam);
-		APPRESULT ConstructResult(int iObjectBreakRule, int iRuleType,int uid, int startIndex, EventMultiAPPResult* opResultMulti, int& orResultCount);
+		APPRESULT ConstructResult(/*int iObjectBreakRule, */int iRuleType,int uid, int startIndex, EventMultiAPPResult* opResultMulti, int& orResultCount);
 		APPRESULT ProcessFrame(const LPRImage* ipImage, const VSDObjectMulti* ipObjectMulti,const VSDObjectTrackMulti* ipObjectTrackMult, int iLightStatus[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult); 
 		APPRESULT AddSubTitle(const LPRImage* ipImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages* ipSubtitleImages ,LPRImage** oppImage);
 		APPRESULT Convert2Media(LPRImage** ipImage, int iNumOfImages, EventMedia& orMedia);
@@ -78,6 +78,13 @@ extern "C"{
 		void GrabVirtualLineImage(const VSDRatioRECT& objectRatioRECT, const VSDObject& lObject, const LPRImage* ipImage);
 		void GrabCenterLineImage(const VSDRatioRECT& objectRatioRECT, const VSDObject& lObject, const LPRImage* ipImage);
 		void TranversePool(EventMultiAPPResult* opResult);
+		bool IsBreakRedLight(int iLightStatus, const VSDRatioRECT& irObjectRect, float iCrossRatio);
+		bool IsBreakCrossLine(int iLoopID,  const VSDRatioRECT& irObjectRect, float iCrossRatio);
+		bool IsBreakTurnLeft(const VSDRatioRECT& irObjectRect, int iLoopID, float iCrossRatio);
+		bool IsBreakTurnRight(const VSDRatioRECT& irObjectRect, int iLoopID, float iCrossRatio);
+		bool IsBreakStraight(const VSDRatioRECT& irObjectRect, int iLoopID);
+		bool IsBreakReverse(int iObjectID, const VSDObjectTrackMulti& irObjectTractMulti, const VSDObject& irObject);
+		bool IsBreakStop(int iObjectID, const VSDObjectTrackMulti& irObjectTractMulti, const VSDRatioRECT& irObjectRect, const VSDObject& irObject);
 		~EventAPPImpl();
 		EventAPPParam mEventAPPParam;
 		ImagePool mImagePool;
@@ -102,6 +109,7 @@ extern "C"{
 		TouchMap mTouchMap;
 		LoopMap mLoopMap;
 		bool mIsLPRInited;
+		LPRImage* mpDecodeBuffer;
 	};
 #ifdef __cplusplus
 }
@@ -137,19 +145,29 @@ static bool __stdcall IsInRect(const VSDRatioPoint& irPoint,const VSDRatioRECT& 
 	return (irPoint.x > irRect.left) && (irPoint.x < irRect.right) && (irPoint.y < irRect.bottom) && (irPoint.y > irRect.top);
 }
 
-// 判断点是否在直线上，因为irLine来自于矩形的边框，所以irLine总是平行于x或y坐标轴
+// 判断点是否在直线上
 static bool __stdcall IsOnLine(const VSDRatioPoint& irPoint, const VSDRatioLine& irLine)
 {
+	/*
 	if(irLine.pt1.x == irLine.pt2.x)
 		return irPoint.x == irLine.pt1.x && ((irPoint.y - irLine.pt1.y) * (irPoint.y - irLine.pt2.y) <= 0);
 	else
 		return irPoint.y == irLine.pt1.y && ((irPoint.x - irLine.pt1.x) * (irPoint.x - irLine.pt2.x) <= 0);
+		*/
+
+	int maxX = MaxT(irLine.pt1.x, irLine.pt2.x);
+	int minX = MinT(irLine.pt1.x, irLine.pt2.x);
+	int maxY = MaxT(irLine.pt1.y, irLine.pt2.y);
+	int minY = MinT(irLine.pt1.y, irLine.pt2.y);
+	if (irPoint.x < minX || irPoint.x > maxX || irPoint.y < minY || irPoint.y > maxY)
+	{
+		return false;
+	}
+	return (irLine.pt1.y - irPoint.y) * (irPoint.x - irLine.pt2.x) == (irPoint.y - irLine.pt2.y) * (irLine.pt1.x - irPoint.x);
+
 }
 
 // 判断两条线段是否相交，若相交则返回true并返回orPointC，否则返回false
-// ！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
-// ！！！！！！！！！！注意，irLineB来源于矩形的边框，所以irLineB总是平行于x或y坐标！！！！！！！！！！
-// ！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
 static bool __stdcall GetCrossRatioPoint(const VSDRatioLine& irLineA, const VSDRatioLine& irLineB, VSDRatioPoint& orPointC)
 {
 	if(IsOnLine(irLineA.pt1, irLineB))
@@ -320,7 +338,7 @@ APPRESULT __stdcall EventAPP_GetPlate(void* ipObject, const LPRImage* ipImage, c
 }
 
 
-EventAPPImpl::EventAPPImpl() : mMaxPoolLength(0), mImageHeight(0), mImageWidth(0), mStartFrameIndex(0),mCheckPoolIndex(0), mIsLPRInited(false)
+EventAPPImpl::EventAPPImpl() : mMaxPoolLength(0), mImageHeight(0), mImageWidth(0), mStartFrameIndex(0),mCheckPoolIndex(0), mIsLPRInited(false), mpDecodeBuffer(NULL)
 {
 }
 
@@ -420,20 +438,27 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 		clock_t begin_travel_pool = clock();
 
 		for(int startIndex = mCheckPoolIndex; startIndex < mStartFrameIndex; ++startIndex)
-			//for(int startIndex = mStartFrameIndex; startIndex >= mStartFrameIndex ; --startIndex)
 		{
 			lCheckPoolData  = mImagePool.at(startIndex);
 			// 遍历当前poolData中的所有object的违章记录
 			for(StatusMap::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
 			{
-				ConstructResult(itObject->second, VSD_BR_NONE, itObject->first, startIndex, opResult, lResultCount);
-				ConstructResult(itObject->second, VSD_BR_TURN_LEFT, itObject->first, startIndex, opResult, lResultCount);
-				ConstructResult(itObject->second, VSD_BR_TURN_RIGHT, itObject->first, startIndex, opResult, lResultCount);
-				ConstructResult(itObject->second, VSD_BR_STRAIGHT_THROUGH, itObject->first, startIndex, opResult, lResultCount);
-				ConstructResult(itObject->second, VSD_BR_CROSS_LANE, itObject->first, startIndex, opResult, lResultCount);
-				ConstructResult(itObject->second, VSD_BR_REVERSE, itObject->first, startIndex, opResult, lResultCount);
-				ConstructResult(itObject->second, VSD_BR_RED_LIGHT, itObject->first, startIndex, opResult, lResultCount);
-				ConstructResult(itObject->second, VSD_BR_STOP, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_NONE)
+					ConstructResult(/*itObject->second, */VSD_BR_NONE, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_TURN_LEFT)
+					ConstructResult(/*itObject->second,*/ VSD_BR_TURN_LEFT, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_TURN_RIGHT)
+					ConstructResult(/*itObject->second,*/ VSD_BR_TURN_RIGHT, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_STRAIGHT_THROUGH)
+					ConstructResult(/*itObject->second,*/ VSD_BR_STRAIGHT_THROUGH, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_CROSS_LANE)
+					ConstructResult(/*itObject->second,*/ VSD_BR_CROSS_LANE, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_REVERSE)
+					ConstructResult(/*itObject->second,*/ VSD_BR_REVERSE, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_RED_LIGHT)
+					ConstructResult(/*itObject->second,*/ VSD_BR_RED_LIGHT, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_STOP)
+					ConstructResult(/*itObject->second, */VSD_BR_STOP, itObject->first, startIndex, opResult, lResultCount);
 			}
 			++mCheckPoolIndex;
 		}
@@ -465,13 +490,6 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 				PriorityMap::iterator itPirorityMap = mPriorityMap.find(itObject->first);
 				if (itPirorityMap != mPriorityMap.end())
 					mPriorityMap.erase(itPirorityMap);
-
-			/*	PlateMap::iterator itPlate = mPlateMap.find(itObject->first);
-				if(itPlate != mPlateMap.end())
-				{
-					delete[] itPlate->second;
-					mPlateMap.erase(itPlate);
-				}*/
 
 				RecordMap::iterator itRecord = mRecordMap.find(itObject->first);
 				if (itRecord != mRecordMap.end())
@@ -542,66 +560,200 @@ APPRESULT EventAPPImpl::GetPlate(const LPRImage* ipImage, const VSDRect& irRect,
 		//PlateMap::iterator itPlateMap = mPlateMap.find(lObject.uid);
 		//if(itPlateMap == mPlateMap.end())
 		//{
-			// 初始化局部参数。
-			LPRParamLocal	localParam;
-			// 识别区域设为当前物体的矩形框，因为物体矩形框有时比较小，没有包括车牌所在的范围，因为我们扩大搜索范围
-			int lEnlargeWidth = irRect.width / 2;
-			int lEnlargeHeight = irRect.height / 2;
-			localParam.m_rectRegion.left = MaxT(irRect.x - lEnlargeWidth, 0);
-			localParam.m_rectRegion.right = MinT(irRect.x + irRect.width + lEnlargeWidth, mImageWidth);
-			localParam.m_rectRegion.top = MaxT(irRect.y - lEnlargeHeight, 0);
-			localParam.m_rectRegion.bottom = MinT(irRect.y + irRect.height + lEnlargeHeight, mImageHeight);
-			localParam.m_nMinPlateWidth = DEFAULT_PLATE_MIN_WIDTH; 
-			localParam.m_nMaxPlateWidth = DEFAULT_PLATE_MAX_WIDTH;
-			localParam.m_fltReserved0 = 0;
-			localParam.m_fltReserved1 = 0;
-			localParam.m_fltReserved2 = 0;
-			localParam.m_fltReserved3 = 0;
+		// 初始化局部参数。
+		LPRParamLocal	localParam;
+		// 识别区域设为当前物体的矩形框，因为物体矩形框有时比较小，没有包括车牌所在的范围，因为我们扩大搜索范围
+		int lEnlargeWidth = irRect.width / 2;
+		int lEnlargeHeight = irRect.height / 2;
+		localParam.m_rectRegion.left = MaxT(irRect.x - lEnlargeWidth, 0);
+		localParam.m_rectRegion.right = MinT(irRect.x + irRect.width + lEnlargeWidth, mImageWidth);
+		localParam.m_rectRegion.top = MaxT(irRect.y - lEnlargeHeight, 0);
+		localParam.m_rectRegion.bottom = MinT(irRect.y + irRect.height + lEnlargeHeight, mImageHeight);
+		localParam.m_nMinPlateWidth = DEFAULT_PLATE_MIN_WIDTH; 
+		localParam.m_nMaxPlateWidth = DEFAULT_PLATE_MAX_WIDTH;
+		localParam.m_fltReserved0 = 0;
+		localParam.m_fltReserved1 = 0;
+		localParam.m_fltReserved2 = 0;
+		localParam.m_fltReserved3 = 0;
 
-			// 初始化LPRParamMulti结构
-			LPRParamMulti	multiParam;
-			LPRParamMulti_Init( &multiParam );
-			LPRParamMulti_Add( &multiParam, localParam );
+		// 初始化LPRParamMulti结构
+		LPRParamMulti	multiParam;
+		LPRParamMulti_Init( &multiParam );
+		LPRParamMulti_Add( &multiParam, localParam );
 
-			// 初始化LPROutputMulti结构
-			LPROutputMulti	multiOutput;
-			LPROutputMulti_Init( &multiOutput );
+		// 初始化LPROutputMulti结构
+		LPROutputMulti	multiOutput;
+		LPROutputMulti_Init( &multiOutput );
 
-			// 检测识别车牌
-			LPRImage* pDecodeImage = NULL;
-			HRESULT lResult = LPRDecodeImage(&pDecodeImage, (const unsigned char*)ipImage->pData, ipImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
-			if(lResult != LPR_OK)
-			{
+		// 检测识别车牌
+		//LPRImage* pDecodeImage = NULL;
+		HRESULT lResult = LPRDecodeImage(&mpDecodeBuffer, (const unsigned char*)ipImage->pData, ipImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
+		if(lResult != LPR_OK)
+		{
 #ifdef __DEBUG
-				TRACE("EventAPP::ProcessFrame Fail to decode image");
+			TRACE("EventAPP::ProcessFrame Fail to decode image");
 #endif
-				LPRReleaseImage(pDecodeImage);
-				return APP_FAIL;
-			}
-			lResult =mLPR.ProcessImage(pDecodeImage, &multiOutput, multiParam, NULL );
-			if (lResult != LPR_OK)
-			{
+			//LPRReleaseImage(pDecodeImage);
+			return APP_FAIL;
+		}
+		lResult =mLPR.ProcessImage(mpDecodeBuffer, &multiOutput, multiParam, NULL );
+		if (lResult != LPR_OK)
+		{
 #ifdef __DEBUG
-				TRACE("EventAPP::ProcessFrame fail to recognize plate");
+			TRACE("EventAPP::ProcessFrame fail to recognize plate");
 #endif
-				LPRReleaseImage(pDecodeImage);
-				return APP_FAIL;
-			}
-			//wchar_t* pPlateCharactor = new wchar_t[LPR_PLATE_STR_LEN];
-			if(multiOutput.m_nNumOutputs > 0)
+			//LPRReleaseImage(pDecodeImage);
+			return APP_FAIL;
+		}
+		//wchar_t* pPlateCharactor = new wchar_t[LPR_PLATE_STR_LEN];
+		if(multiOutput.m_nNumOutputs > 0)
+		{
+			for (int i = 0; i < LPR_PLATE_STR_LEN; ++i)
 			{
-				for (int i = 0; i < LPR_PLATE_STR_LEN; ++i)
-				{
-					oPlate[i] = multiOutput.m_outputs[0].wszRec[i];
-				}
+				oPlate[i] = multiOutput.m_outputs[0].wszRec[i];
 			}
-			else
-				oPlate[0] = '\0';
-			//mPlateMap.insert(std::make_pair(lObject.uid, pPlateCharactor));
-			LPRReleaseImage(pDecodeImage);
+		}
+		else
+			oPlate[0] = '\0';
+		//mPlateMap.insert(std::make_pair(lObject.uid, pPlateCharactor));
+		//LPRReleaseImage(pDecodeImage);
 		//}
 	}
 
+}
+
+bool EventAPPImpl::IsBreakRedLight(int iLightStatus, const VSDRatioRECT& irObjectRect, float iCrossRatio)
+{
+	if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_RED_LIGHT)] == EVENT_APP_RULE_SWITCH_ON && iLightStatus == EVENT_APP_LIGHT_RED )	
+	{
+		if (GetCrossRatio(mEventAPPParam.mStopLine, irObjectRect) >= iCrossRatio)
+		{	
+			return true;
+		}
+	}
+	return false;
+}
+
+bool EventAPPImpl::IsBreakCrossLine(int iLoopID, const VSDRatioRECT& irObjectRect, float iCrossRatio)
+{
+	if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_CROSS_LANE)] == EVENT_APP_RULE_SWITCH_ON)
+	{
+		if (GetCrossRatio(mLaneMark[2 * iLoopID], irObjectRect) >= iCrossRatio || GetCrossRatio(mLaneMark[2 * iLoopID + 1], irObjectRect) >= iCrossRatio)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool EventAPPImpl::IsBreakTurnLeft(const VSDRatioRECT& irObjectRect, int iLoopID, float iCrossRatio)
+{
+	if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_TURN_LEFT)] == EVENT_APP_RULE_SWITCH_ON && !(mEventAPPParam.mVSDParam.loopLaneProperty[iLoopID] & VSD_LANE_TURN_LEFT) )
+	{
+		if (GetCrossRatio(mEventAPPParam.mLeftTurnLine, irObjectRect) >= iCrossRatio)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool EventAPPImpl::IsBreakTurnRight(const VSDRatioRECT& irObjectRect, int iLoopID, float iCrossRatio)
+{
+	if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_TURN_RIGHT)] == EVENT_APP_RULE_SWITCH_ON && !(mEventAPPParam.mVSDParam.loopLaneProperty[iLoopID] & VSD_BR_TURN_RIGHT) )
+	{
+		if (GetCrossRatio(mEventAPPParam.mLeftTurnLine, irObjectRect) >= iCrossRatio)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool EventAPPImpl::IsBreakStraight(const VSDRatioRECT& irObjectRect, int iLoopID)
+{
+	if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_STRAIGHT_THROUGH)] == EVENT_APP_RULE_SWITCH_ON && !(mEventAPPParam.mVSDParam.loopLaneProperty[iLoopID] & VSD_LANE_STRAIGHT)) 
+	{
+		if (GetCrossRatio(mEventAPPParam.mStraightLine, irObjectRect) > 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool EventAPPImpl::IsBreakReverse(int iObjectID, const VSDObjectTrackMulti& irObjectTractMulti, const VSDObject& irObject)
+{
+	if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_REVERSE)] == EVENT_APP_RULE_SWITCH_ON)
+	{
+		VSDObjectTrack lObjectTrack;
+		lObjectTrack.uid = -1;
+		for (int i= 0; i < irObjectTractMulti.nObjects; ++i)
+		{
+			if (irObjectTractMulti.objTracks[i].uid == iObjectID)
+			{
+				lObjectTrack = irObjectTractMulti.objTracks[i];
+				break;
+			}
+		}
+		if (lObjectTrack.uid != -1)
+		{
+			int lTrackNum = lObjectTrack.nTracks;
+			if (lTrackNum > 1)
+			{
+				if(mEventAPPParam.mVSDParam.nEventType == VSDEvent_VehicleHead && lObjectTrack.tracks[0].y - irObject.rect.height * (float)mEventAPPParam.mReverseRatio / 100 > lObjectTrack.tracks[lTrackNum - 1].y)
+				{
+					return true;
+				}
+				else if(mEventAPPParam.mVSDParam.nEventType == VSDEvent_VehicleTail && lObjectTrack.tracks[0].y + irObject.rect.height *(float) mEventAPPParam.mReverseRatio / 100 < lObjectTrack.tracks[lTrackNum - 1].y)
+				{
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+bool EventAPPImpl::IsBreakStop(int iObjectID, const VSDObjectTrackMulti& irObjectTractMulti, const VSDRatioRECT& irObjectRect , const VSDObject& irObject)
+{
+	if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_STOP)] == EVENT_APP_RULE_SWITCH_ON)
+	{
+		int lObjectMiddleX = (irObjectRect.left + irObjectRect.right ) / 2;//irRect.width / 2 + irRect.x;
+		int lObjectMiddleY = (irObjectRect.bottom + irObjectRect.top) / 2;// irRect.height / 2 + irRect.y;
+		VSDRatioPoint lTmpPoint = {lObjectMiddleX, lObjectMiddleY};
+		if(IsInRect(lTmpPoint, mEventAPPParam.mStopForbidRect))
+		{
+			VSDObjectTrack lObjectTrack;
+			lObjectTrack.uid = -1;
+			for (int i= 0; i < irObjectTractMulti.nObjects; ++i)
+			{
+				if (irObjectTractMulti.objTracks[i].uid == iObjectID)
+				{
+					lObjectTrack = irObjectTractMulti.objTracks[i];
+					break;
+				}
+			}
+			if (lObjectTrack.uid != -1)
+			{
+				int lTrackNum = lObjectTrack.nTracks;
+				if (lTrackNum > 1)
+				{
+					int lCurrentX = irObject.rect.width / 2 + irObject.rect.x;
+					int lCurrentY = irObject.rect.height / 2 + irObject.rect.y;
+
+					int lPreviousX = lObjectTrack.tracks[lTrackNum - 2].width / 2 + lObjectTrack.tracks[lTrackNum - 2].x;
+					int lPreviousY = lObjectTrack.tracks[lTrackNum - 2].height / 2 + lObjectTrack.tracks[lTrackNum - 2].y;
+					if ((lCurrentX - lPreviousX) * (lCurrentX - lPreviousX) + (lCurrentY - lPreviousY) * (lCurrentY - lPreviousY) < ((float)mEventAPPParam.mStopRatio / 100 * irObject.rect.width) * (mEventAPPParam.mStopRatio / 100 * irObject.rect.width))
+					{
+						return true;
+					}
+				}
+
+			}
+		}
+	}
+	return false;
 }
 
 APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMulti* ipObjectMulti, const VSDObjectTrackMulti* ipObjectTrackMulti, int isRedLightOn[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult)
@@ -637,18 +789,18 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 	// 通过解码得到Image的长宽值
 	if(mImageHeight == 0 || mImageWidth == 0)
 	{
-		LPRImage* pDecodeImage = NULL;
-		lResult = LPRDecodeImage(&pDecodeImage, (const unsigned char*)ipImage->pData, ipImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
+		//LPRImage* pDecodeImage = NULL;
+		lResult = LPRDecodeImage(&mpDecodeBuffer, (const unsigned char*)ipImage->pData, ipImage->imageSize, LPR_ENCODE_FORMAT_JPG, 0);
 		if(lResult != LPR_OK)
 		{
 #ifdef __DEBUG
 			TRACE("EventAPP::ProcessFrame Fail to decode image");
 #endif
-			LPRReleaseImage(pDecodeImage);
+			//LPRReleaseImage(pDecodeImage);
 			return APP_FAIL;
 		}
-		mImageHeight = pDecodeImage->height;
-		mImageWidth = pDecodeImage->width;
+		mImageHeight = mpDecodeBuffer->height;
+		mImageWidth = mpDecodeBuffer->width;
 
 		VSDRatioPoint lTmpPoint;
 		lResult = VSDEvent_GenerateLaneMark(lVSDParam.ptRoad, lVSDParam.virtualLoopLine, lVSDParam.nVirtualLoop, mImageWidth, mImageHeight, lVSDParam.nWidthBase, lVSDParam.nHeightBase, mLaneMark, &lTmpPoint);
@@ -664,9 +816,9 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 		for (int index = 0; index < lVSDParam.nVirtualLoop; ++index)
 		{
 			VSDRatioPoint lTmpPoint;
-			GetCrossRatioPoint(mLaneMark[2 * index], mEventAPPParam.mStopLine,lTmpPoint);
+			GetCrossRatioPoint(mLaneMark[2 * index], mEventAPPParam.mStopLine, lTmpPoint);
 			mLaneMark[2 * index].pt1 = lTmpPoint;
-			GetCrossRatioPoint(mLaneMark[2 * index + 1], mEventAPPParam.mStopLine,lTmpPoint);
+			GetCrossRatioPoint(mLaneMark[2 * index + 1], mEventAPPParam.mStopLine, lTmpPoint);
 			mLaneMark[2 * index + 1].pt1 = lTmpPoint;
 		}
 
@@ -694,7 +846,7 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 			return APP_FAIL;
 		}
 		mIsLPRInited = true;
-		LPRReleaseImage(pDecodeImage);
+		//LPRReleaseImage(pDecodeImage);
 	}
 	
 	// 得到压线阈值
@@ -739,156 +891,86 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 			mLoopMap.insert(std::make_pair(lObject.uid, lObject.nLoopID));
 
 		int lObjectHistoryStatus = VSD_BR_NONE;	
-		int lMaxPriority = -1;		
+		int lMaxPriority = 0;		
 		PriorityMap::iterator itPriorityMap = mPriorityMap.find(lObject.uid);
 		if(itPriorityMap != mPriorityMap.end())
 			lMaxPriority = itPriorityMap->second;
-		else
-			lMaxPriority = 0;
 		//clock_t after_preprocess = clock();	
 		lPoolData.mBreakRules[lObject.uid] = VSD_BR_NONE;	
+		bool isBreakRule = false;
 		// 判断是否闯红灯
-		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_RED_LIGHT]] == EVENT_APP_RULE_SWITCH_ON && isRedLightOn[lObject.nLoopID] == EVENT_APP_LIGHT_RED  && GetCrossRatio(mEventAPPParam.mStopLine, objectRatioRECT) >= crossRatio)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_RED_LIGHT)] == EVENT_APP_RULE_SWITCH_ON && isRedLightOn[lObject.nLoopID] == EVENT_APP_LIGHT_RED  && GetCrossRatio(mEventAPPParam.mStopLine, objectRatioRECT) >= crossRatio)
+		if (mEventAPPParam.mRulePriority[getIndex(VSD_BR_RED_LIGHT)] > lMaxPriority)
 		{
-#ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid  << "闯红灯，车道" << lObject.nLoopID << std::endl; 
-#endif
-			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_RED_LIGHT;
-			lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_RED_LIGHT)]);
+			isBreakRule = this->IsBreakRedLight(isRedLightOn[lObject.nLoopID], objectRatioRECT, crossRatio);
+			if (isBreakRule)
+			{
+				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_RED_LIGHT;
+				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_RED_LIGHT)]);
+			}
 		}
 		// 判断是否压车道
-		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_CROSS_LANE]] == EVENT_APP_RULE_SWITCH_ON && GetCrossRatio(mLaneMark[2 * lObject.nLoopID], objectRatioRECT) >= crossRatio)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_CROSS_LANE)] == EVENT_APP_RULE_SWITCH_ON && GetCrossRatio(mLaneMark[2 * lObject.nLoopID], objectRatioRECT) >= crossRatio)
+		if (mEventAPPParam.mRulePriority[getIndex(VSD_BR_CROSS_LANE)] > lMaxPriority)
 		{
-#ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID  << std::endl;
-#endif
-			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_CROSS_LANE;
-			lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_CROSS_LANE)]);
+			isBreakRule = this->IsBreakCrossLine(lObject.nLoopID, objectRatioRECT, crossRatio);
+			if (isBreakRule)
+			{
+				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_CROSS_LANE;
+				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_CROSS_LANE)]);
+			}
 		}
-		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_CROSS_LANE]] == EVENT_APP_RULE_SWITCH_ON && GetCrossRatio(mLaneMark[2 * lObject.nLoopID + 1], objectRatioRECT) >= crossRatio)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_CROSS_LANE)] == EVENT_APP_RULE_SWITCH_ON && GetCrossRatio(mLaneMark[2 * lObject.nLoopID + 1], objectRatioRECT) >= crossRatio)
-		{
-#ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "压到" << lObject.nLoopID  <<  std::endl;
-#endif
-			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_CROSS_LANE;
-			lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_CROSS_LANE)]);
-		}
-
 		// 判断是否辆违章左转
-		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_TURN_LEFT]] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_LEFT) && GetCrossRatio(mEventAPPParam.mLeftTurnLine, objectRatioRECT) >= crossRatio)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_TURN_LEFT)] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_LEFT) && GetCrossRatio(mEventAPPParam.mLeftTurnLine, objectRatioRECT) >= crossRatio)
+		if (mEventAPPParam.mRulePriority[getIndex(VSD_BR_TURN_LEFT)] > lMaxPriority)
 		{
-#ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章左拐" << lObject.nLoopID << std::endl;
-#endif
-			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_TURN_LEFT;
-			lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_TURN_LEFT)]);
+			isBreakRule = this->IsBreakTurnLeft(objectRatioRECT, lObject.nLoopID, crossRatio);
+			if (isBreakRule)
+			{
+				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_TURN_LEFT;
+				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_TURN_LEFT)]);
+			}
 		}
-		
 		// 判断是否违章右转
-		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_TURN_RIGHT]] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_RIGHT) && GetCrossRatio(mEventAPPParam.mRightTurnLine, objectRatioRECT) >= crossRatio)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_LANE_TURN_RIGHT)] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_TURN_RIGHT) && GetCrossRatio(mEventAPPParam.mRightTurnLine, objectRatioRECT) >= crossRatio)
+		if (mEventAPPParam.mRulePriority[getIndex(VSD_BR_TURN_RIGHT)] > lMaxPriority)
 		{
-#ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章右转" << lObject.nLoopID << std::endl;
-#endif
-			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_TURN_RIGHT;
-			lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_TURN_RIGHT)]);
+			isBreakRule = this->IsBreakTurnRight(objectRatioRECT, lObject.nLoopID, crossRatio);
+			if (isBreakRule)
+			{
+				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_TURN_RIGHT;
+				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_TURN_RIGHT)]);
+			}
+						
 		}
-		
 		// 判断是否违章直行
-		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_STRAIGHT_THROUGH]] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(mEventAPPParam.mStraightLine, objectRatioRECT) >= crossRatio)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_STRAIGHT_THROUGH)] == EVENT_APP_RULE_SWITCH_ON && !(lVSDParam.loopLaneProperty[lObject.nLoopID] & VSD_LANE_STRAIGHT) && GetCrossRatio(mEventAPPParam.mStraightLine, objectRatioRECT) > 0)
+		if (mEventAPPParam.mRulePriority[getIndex(VSD_BR_STRAIGHT_THROUGH)] > lMaxPriority)
 		{
-#ifdef __DEBUG
-			lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章直行" << lObject.nLoopID  << std::endl;
-#endif
-			lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STRAIGHT_THROUGH;
-			lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_STRAIGHT_THROUGH)]);
+			isBreakRule = this->IsBreakStraight(objectRatioRECT, lObject.nLoopID);
+			if (isBreakRule)
+			{
+				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STRAIGHT_THROUGH;
+				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_STRAIGHT_THROUGH)]);
+			}
 		}
 		// 判断是否逆行
-		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_REVERSE]] == EVENT_APP_RULE_SWITCH_ON)// && lObject.status & VSD_BR_REVERSE)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_REVERSE)] == EVENT_APP_RULE_SWITCH_ON)
+		if (mEventAPPParam.mRulePriority[getIndex(VSD_BR_REVERSE)] > lMaxPriority)
 		{
-			VSDObjectTrack lObjectTrack;
-			lObjectTrack.uid = -1;
-			for (int i= 0; i < ipObjectTrackMulti->nObjects; ++i)
+			isBreakRule = this->IsBreakReverse(lObject.uid, *ipObjectTrackMulti, lObject);
+			if (isBreakRule)
 			{
-				if (ipObjectTrackMulti->objTracks[i].uid == lObject.uid)
-				{
-					lObjectTrack = ipObjectTrackMulti->objTracks[i];
-					break;
-				}
-			}
-			if (lObjectTrack.uid != -1)
-			{
-				int lTrackNum = lObjectTrack.nTracks;
-				if (lTrackNum > 1)
-				{
-					if(lVSDParam.nEventType == VSDEvent_VehicleHead && lObjectTrack.tracks[0].y - lObject.rect.height * (float)mEventAPPParam.mReverseRatio / 100 > lObjectTrack.tracks[lTrackNum - 1].y)
-					{
-#ifdef __DEBUG
-						lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "逆行" << lObject.nLoopID << std::endl;
-#endif
-						lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
-						lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_REVERSE)]);
-					}
-					else if(lVSDParam.nEventType == VSDEvent_VehicleTail && lObjectTrack.tracks[0].y + lObject.rect.height *(float) mEventAPPParam.mReverseRatio / 100 < lObjectTrack.tracks[lTrackNum - 1].y)
-					{
-#ifdef __DEBUG
-						lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "逆行" << lObject.nLoopID << std::endl;
-#endif
-						lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
-						lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_REVERSE)]);
-					}
-				}
+				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_REVERSE;
+				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_REVERSE)]);
 			}
 		}
 		// 判断是否违章停车
 		//if(mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[VSD_BR_STOP]] == EVENT_APP_RULE_SWITCH_ON)// && lObject.status & VSD_BR_STOP)
-		if(mEventAPPParam.mRuleSwitch[getIndex(VSD_BR_STOP)] == EVENT_APP_RULE_SWITCH_ON)
+		if (mEventAPPParam.mRulePriority[getIndex(VSD_BR_STOP)] > lMaxPriority)
 		{
-			int lObjectMiddleX = (objectRatioRECT.left + objectRatioRECT.right ) / 2;//irRect.width / 2 + irRect.x;
-			int lObjectMiddleY = (objectRatioRECT.bottom + objectRatioRECT.top) / 2;// irRect.height / 2 + irRect.y;
-			VSDRatioPoint lTmpPoint = {lObjectMiddleX, lObjectMiddleY};
-			if(IsInRect(lTmpPoint, mEventAPPParam.mStopForbidRect))
+			isBreakRule = this->IsBreakStop(lObject.uid, *ipObjectTrackMulti, objectRatioRECT, lObject);
+			if (isBreakRule)
 			{
-				VSDObjectTrack lObjectTrack;
-				lObjectTrack.uid = -1;
-				for (int i= 0; i < ipObjectTrackMulti->nObjects; ++i)
-				{
-					if (ipObjectTrackMulti->objTracks[i].uid == lObject.uid)
-					{
-						lObjectTrack = ipObjectTrackMulti->objTracks[i];
-						break;
-					}
-				}
-				if (lObjectTrack.uid != -1)
-				{
-					int lTrackNum = lObjectTrack.nTracks;
-					if (lTrackNum > 1)
-					{
-						int lCurrentX = lObject.rect.width / 2 + lObject.rect.x;
-						int lCurrentY = lObject.rect.height / 2 + lObject.rect.y;
-
-						int lPreviousX = lObjectTrack.tracks[lTrackNum - 2].width / 2 + lObjectTrack.tracks[lTrackNum - 2].x;
-						int lPreviousY = lObjectTrack.tracks[lTrackNum - 2].height / 2 + lObjectTrack.tracks[lTrackNum - 2].y;
-						if ((lCurrentX - lPreviousX) * (lCurrentX - lPreviousX) + (lCurrentY - lPreviousY) * (lCurrentY - lPreviousY) < ((float)mEventAPPParam.mStopRatio / 100 * lObject.rect.width) * (mEventAPPParam.mStopRatio / 100 * lObject.rect.width))
-						{
-#ifdef __DEBUG
-							lBreakRuleHistoryLog << lCurrentPicName << "车" << lObject.uid << "违章停车" << lObject.nLoopID << std::endl;
-#endif
-							lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STOP;
-							lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_STOP)]);
-						}
-					}
-
-				}
+				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_STOP;
+				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_STOP)]);
 			}
 		}
+		// 记录违章行为
 		mStatusMap[lObject.uid] |= lPoolData.mBreakRules[lObject.uid];
 		mPriorityMap[lObject.uid] = lMaxPriority;	
 	}
@@ -898,11 +980,11 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 	return APP_OK;
 }
 
-APPRESULT EventAPPImpl::ConstructResult(int iObjectBreakRule, int iRuleType, int uid, int iStartIndex, EventMultiAPPResult* opResultMulti, int& orResultCount)
+APPRESULT EventAPPImpl::ConstructResult(/*int iObjectBreakRule, */int iRuleType, int uid, int iStartIndex, EventMultiAPPResult* opResultMulti, int& orResultCount)
 {
 	// objects是否有违规情况，并且是否要录制iRuleType
 	//if((iObjectBreakRule == iRuleType) && (mEventAPPParam.mRuleSwitch[(*pRuleIndexMap)[iRuleType]]))
-	if((iObjectBreakRule == iRuleType) && (mEventAPPParam.mRuleSwitch[getIndex(iRuleType)]))
+	if(/*(iObjectBreakRule == iRuleType) && */(mEventAPPParam.mRuleSwitch[getIndex(iRuleType)]))
 	{
 		// 如果有优先级更高的breakrule（包括相同的breakrule），我们简单的返回
 		//if(pRecordMap->find(uid) != pRecordMap->end() || ((mEventAPPParam.mRulePriority)[(*pRuleIndexMap)[iRuleType]]) < (*pPriorityMap)[uid] || (iRuleType == VSD_BR_NONE && (*pStatusMap)[uid] != VSD_BR_NONE))
@@ -1031,6 +1113,8 @@ EventAPPImpl::~EventAPPImpl()
 
 	for(CaptureImageMap::iterator it = mTouchVirtualLoopLineImage.begin(); it != mTouchVirtualLoopLineImage.end(); ++it)
 		LPRReleaseImage(it->second);
+
+	delete mpDecodeBuffer;
 }
 
 APPRESULT EventAPPImpl::AddSubTitle(const LPRImage* ipImage, const EventSubtitleOverlay& irSubTitleOverlay, const EventSubtitleImages* ipSubtitleImages, LPRImage** oppImage)
@@ -1578,6 +1662,7 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 
 	return APP_OK;
 }
+
 
 static bool CmpFileName(const string& a, const string& b)
 {
