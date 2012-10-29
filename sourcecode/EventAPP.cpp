@@ -429,7 +429,6 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 	if (mImagePool.size() > mMaxPoolLength + 1)
 	{
 		PoolData lCheckPoolData;
-		clock_t begin_travel_pool = clock();
 
 		for(int startIndex = mCheckPoolIndex; startIndex < mStartFrameIndex; ++startIndex)
 		{
@@ -763,7 +762,6 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 	
 	VSDEventParam lVSDParam = mEventAPPParam.mVSDParam;
 	LPRRESULT lResult = LPR_OK;	
-	clock_t begin_preprocess = clock();
 	// 通过解码得到Image的长宽值，同时根据Image的长宽值计算lanemark，同时根据Image的长宽值初始化LPR模块
 	if(mImageHeight == 0 || mImageWidth == 0)
 	{
@@ -856,10 +854,6 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 	LPRImage *lpImage = LPRCloneImage(ipImage);
 	lPoolData.mpImage = lpImage;
 	// 遍历输入的Image和ObjectMuli中的每个物体，检测每个物体的违章情况并记录到mBreakRules里
-	clock_t after_preprocess = clock();
-#ifdef __DEBUG
-	cout << "预处理抓图像" << after_preprocess - begin_preprocess << endl;
-#endif
 	for(int index = 0; index < lObjectCount; ++index)
 	{		
 		lObject = ipObjectMulti->objects[index];
@@ -1675,7 +1669,7 @@ clock_t endclock_VSD = clock();
 //cout << "time elaspeVSD:" << endclock_VSD - startclock_VSD << endl;
 		VSDObjectTrackMulti lObjectTrackMulti;
 		VSDObjectTrackMulti_Init(&lObjectTrackMulti);
-		int lLights[MAX_VIRTUAL_LOOPS] = {1, 1, 1, 1};
+		int lLights[MAX_VIRTUAL_LOOPS] = {0, 0, 0, 0};
 		lResult = lEvent.GetAllTracks(&lObjectTrackMulti);
 		clock_t startclock = clock();
 		lEventApp.ProcessFrame(&imgJPG,&lObjectMulti, &lObjectTrackMulti, lLights, &lAPPResult);
