@@ -127,7 +127,7 @@ LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynt
 
 LPRImage* ImageSynthesis::synthesis(LPRImage *pRawImages[], const EventImageSynthesis &synthesisParam, const VSDRect &vsrRect)
 {
-	LPRMutexLocker locker(&mMutex);	// 加锁，多线程安全
+	//LPRMutexLocker locker(&mMutex);	// 加锁，多线程安全
 
 	assert(synthesisParam.mNumberofImage > 0);
 	// TODO 检查图像宽高一致 需要保证输入的图像是一致的
