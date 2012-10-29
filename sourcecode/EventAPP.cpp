@@ -1114,6 +1114,7 @@ EventAPPImpl::~EventAPPImpl()
 	for(CaptureImageMap::iterator it = mTouchVirtualLoopLineImage.begin(); it != mTouchVirtualLoopLineImage.end(); ++it)
 		LPRReleaseImage(it->second);
 
+	LPRReleaseImage(mpDecodeBuffer);
 	delete mpDecodeBuffer;
 }
 
