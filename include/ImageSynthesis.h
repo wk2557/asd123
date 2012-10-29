@@ -3,7 +3,7 @@
 
 #include "EventAPPStructure.h"
 #include "LPRImageDecoder.h"
-#include "LPRMutex.h"
+//#include "LPRMutex.h"
 #include <LPRVideo.h>
 
 class ImageSynthesis
@@ -52,7 +52,7 @@ private:
 	void calculateRect(RECT &rect, int orien, int w, int h, int imgIndex);
 private:
 	LPRImageDecoder mImageDecoder;	// 共享缓冲区的图像解码器
-	LPRMutex mMutex;		// 锁，控制多线程安全
+	//LPRMutex mMutex;		// 锁，控制多线程安全
 };
 
 #endif

@@ -410,7 +410,7 @@ bool MediaConverter::outputFrame(LPRImage *pRawImage)
 		printf("Failed to parse %s.\n", "fake.jpg");
 		return false;
 	}
-	av_dump_format(pInputFormatCtx, 0, "fake.jpg", 0);
+	//av_dump_format(pInputFormatCtx, 0, "fake.jpg", 0);
 	int videoStreamIndex = -1;
 	for (size_t i = 0; i < pInputFormatCtx->nb_streams; ++ i)
 	{
