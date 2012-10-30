@@ -61,7 +61,7 @@ typedef int APPRESULT;
 
 #define RULE_TYPES						10		// 违反规则的个数，不包括VSD_BR_NONE
 #define MAX_FRAME_AHEAD					40		// 违规前的最大录制帧数
-#define MAX_FRAME_BEHIND					20		// 违规后的最大录制帧数
+#define MAX_FRAME_BEHIND					40		// 违规后的最大录制帧数
 #define DEFAULT_PLATE_MIN_WIDTH			70		// 车牌的最小宽度，供车牌识别用
 #define DEFAULT_PLATE_MAX_WIDTH			300		// 车牌的最大宽度，供车牌识别用
 #define DEFAULT_NUMBER_PLATE			1		// 车牌的数目，供车牌识别用
