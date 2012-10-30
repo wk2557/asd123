@@ -70,7 +70,7 @@ extern "C"{
 	public:
 		EventAPPImpl();
 		APPRESULT Init(const EventAPPParam& irParam);
-		APPRESULT ConstructResult(/*int iObjectBreakRule, */int iRuleType,int uid, int startIndex, EventMultiAPPResult* opResultMulti, int& orResultCount);
+		void ConstructResult(/*int iObjectBreakRule, */int iRuleType,int uid, int startIndex, EventMultiAPPResult* opResultMulti, int& orResultCount);
 		APPRESULT ProcessFrame(const LPRImage* ipImage, const VSDObjectMulti* ipObjectMulti,const VSDObjectTrackMulti* ipObjectTrackMult, int iLightStatus[MAX_VIRTUAL_LOOPS], EventMultiAPPResult* opResult); 
 		APPRESULT AddSubTitle(const LPRImage* ipImage, const EventSubtitleOverlay &subtitles, const EventSubtitleImages* ipSubtitleImages ,LPRImage** oppImage);
 		APPRESULT Convert2Media(LPRImage** ipImage, int iNumOfImages, EventMedia& orMedia);
@@ -399,8 +399,10 @@ void EventAPPImpl::GrabCenterLineImage(const VSDRatioRECT& objectRatioRECT, cons
 	// 抓取物体接触中间线的图片, 
 	int lMiddlCentreLine = (mEventAPPParam.mCentreLine.pt1.y + mEventAPPParam.mCentreLine.pt2.y) / 2;
 	int testLoopID = lObject.nLoopID;
+	
 	if(lMiddlCentreLine <= objectRatioRECT.bottom && lMiddlCentreLine >= objectRatioRECT.top)
 	{
+		int testuid = lObject.uid;
 		CaptureImageMap::iterator itVirtualImage = mTouchCentreLineImage.find(lObject.uid);
 		if(itVirtualImage == mTouchCentreLineImage.end())
 		{
@@ -436,9 +438,9 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 			// 遍历当前poolData中的所有object的违章记录
 			for(StatusMap::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
 			{
-				if(itObject->second == VSD_BR_NONE)
-					ConstructResult(/*itObject->second, */VSD_BR_NONE, itObject->first, startIndex, opResult, lResultCount);
-				else if(itObject->second == VSD_BR_TURN_LEFT)
+				//if(itObject->second == VSD_BR_NONE)
+				//	ConstructResult(/*itObject->second, */VSD_BR_NONE, itObject->first, startIndex, opResult, lResultCount);
+				if(itObject->second == VSD_BR_TURN_LEFT)
 					ConstructResult(/*itObject->second,*/ VSD_BR_TURN_LEFT, itObject->first, startIndex, opResult, lResultCount);
 				else if(itObject->second == VSD_BR_TURN_RIGHT)
 					ConstructResult(/*itObject->second,*/ VSD_BR_TURN_RIGHT, itObject->first, startIndex, opResult, lResultCount);
@@ -455,11 +457,20 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 			}
 			++mCheckPoolIndex;
 		}
-		--mCheckPoolIndex;	
+		if (mCheckPoolIndex > 0)
+		{
+			--mCheckPoolIndex;
+		}
+		
 		// 清除不再需要的数据	
 		lCheckPoolData = mImagePool.front();
 		for(StatusMap::iterator itObject = lCheckPoolData.mBreakRules.begin(); itObject != lCheckPoolData.mBreakRules.end(); ++itObject)
+		//StatusMap::iterator itObject = lCheckPoolData.mBreakRules.begin();
+		//RatioRectMap::iterator itRatioRect = lCheckPoolData.mRatioRectMap.begin();
+		//for(int i = 0; i < lCheckPoolData.mBreakRules.size(); ++i)
 		{
+			//itObject = lCheckPoolData;
+			
 			int lShowUp = 0;
 			for(int i =  1; i < mImagePool.size(); ++i)
 			{
@@ -471,7 +482,12 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 				}
 			}
 			if(0 == lShowUp)
-			{				
+			//if()
+			{		
+				int testuid = itObject->first;
+				if(itObject->second == VSD_BR_NONE)
+					ConstructResult(/*itObject->second, */VSD_BR_NONE, itObject->first, 0, opResult, lResultCount);
+				
 				StatusMap::iterator itStatusMap = mStatusMap.find(itObject->first);
 				if(itStatusMap != mStatusMap.end())
 					mStatusMap.erase(itStatusMap);
@@ -882,6 +898,7 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 			isBreakRule = this->IsBreakRedLight(isRedLightOn[lObject.nLoopID], objectRatioRECT, crossRatio);
 			if (isBreakRule)
 			{
+				int testuid = lObject.uid;
 				lPoolData.mBreakRules[lObject.uid] |= VSD_BR_RED_LIGHT;
 				lMaxPriority = MaxT(lMaxPriority, mEventAPPParam.mRulePriority[getIndex(VSD_BR_RED_LIGHT)]);
 			}
@@ -956,7 +973,7 @@ APPRESULT EventAPPImpl::ProcessFrame(const LPRImage *ipImage, const VSDObjectMul
 	return APP_OK;
 }
 
-APPRESULT EventAPPImpl::ConstructResult(int iRuleType, int uid, int iStartIndex, EventMultiAPPResult* opResultMulti, int& orResultCount)
+void EventAPPImpl::ConstructResult(int iRuleType, int uid, int iStartIndex, EventMultiAPPResult* opResultMulti, int& orResultCount)
 {
 	// objects是否有违规情况，并且是否要录制iRuleType
 	if((mEventAPPParam.mRuleSwitch[getIndex(iRuleType)]))
@@ -964,19 +981,8 @@ APPRESULT EventAPPImpl::ConstructResult(int iRuleType, int uid, int iStartIndex,
 		// 如果有优先级更高的breakrule（包括相同的breakrule），我们简单的返回
 		//if(pRecordMap->find(uid) != pRecordMap->end() || ((mEventAPPParam.mRulePriority)[(*pRuleIndexMap)[iRuleType]]) < (*pPriorityMap)[uid] || (iRuleType == VSD_BR_NONE && (*pStatusMap)[uid] != VSD_BR_NONE))
 		if(mRecordMap.find(uid) != mRecordMap.end() || ((mEventAPPParam.mRulePriority)[getIndex(iRuleType)]) < mPriorityMap[uid] || (iRuleType == VSD_BR_NONE && mStatusMap[uid] != VSD_BR_NONE))
-			return APP_OK;
-		if (iRuleType == VSD_BR_NONE )
-		{
-			if (mEventAPPParam.mVSDParam.nEventType == VSDEvent_VehicleHead && mImagePool.at(iStartIndex).mRatioRectMap[uid].top < MinT(mEventAPPParam.mCentreLine.pt1.y, mEventAPPParam.mCentreLine.pt2.y))
-			{
-				return APP_OK;
-			}
-			else if(mEventAPPParam.mVSDParam.nEventType == VSDEvent_VehicleTail && mImagePool.at(iStartIndex).mRatioRectMap[uid].bottom > MaxT(mEventAPPParam.mCentreLine.pt1.y, mEventAPPParam.mCentreLine.pt2.y))
-			{
-				return APP_OK;
-			}
-		}
-		// 如果没有优先级更高的breakrule，我们构建EventAPPResult
+			return;
+		
 		mRecordMap[uid] = 1;
 		EventAPPResult lAPPResult;
 		lAPPResult.mID = uid;
@@ -1026,12 +1032,22 @@ APPRESULT EventAPPImpl::ConstructResult(int iRuleType, int uid, int iStartIndex,
 			lpImage = LPRCloneImage(itVirtualLoopLeave->second);
 			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
 		}
+		else
+		{
+			lpImage = LPRCloneImage(mImagePool.at(lSizeToCopy).mpImage);
+			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+		}
 		if(iRuleType == VSD_BR_RED_LIGHT)
 		{
 			CaptureImageMap::iterator itCentreImage = mTouchCentreLineImage.find(uid);
 			if(itCentreImage != mTouchCentreLineImage.end())
 			{
 				lpImage = LPRCloneImage(itCentreImage->second);
+				lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+			}
+			else
+			{
+				lpImage = LPRCloneImage(mImagePool.at(lSizeToCopy).mpImage);
 				lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
 			}
 		}
@@ -1055,7 +1071,7 @@ APPRESULT EventAPPImpl::ConstructResult(int iRuleType, int uid, int iStartIndex,
 		opResultMulti->mppAPPResult[orResultCount++] = lAPPResult;
 		opResultMulti->mNumOfResult = orResultCount;
 	}
-	return APP_OK;
+	return;
 }
 
 EventAPPImpl::~EventAPPImpl()
@@ -1669,7 +1685,7 @@ clock_t endclock_VSD = clock();
 //cout << "time elaspeVSD:" << endclock_VSD - startclock_VSD << endl;
 		VSDObjectTrackMulti lObjectTrackMulti;
 		VSDObjectTrackMulti_Init(&lObjectTrackMulti);
-		int lLights[MAX_VIRTUAL_LOOPS] = {0, 0, 0, 0};
+		int lLights[MAX_VIRTUAL_LOOPS] = {1, 1, 1, 1};
 		lResult = lEvent.GetAllTracks(&lObjectTrackMulti);
 		clock_t startclock = clock();
 		lEventApp.ProcessFrame(&imgJPG,&lObjectMulti, &lObjectTrackMulti, lLights, &lAPPResult);
@@ -1695,6 +1711,7 @@ clock_t endclock_VSD = clock();
 			{
 				if (lResult.mNumOfSynthesisImage > 0)
 				{
+					int testuid = lResult.mID;
 					swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_车道%d.jpg", lResult.mID, lResult.mLoopID);
 					//swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_车道%d_车牌%ls.jpg", lResult.mID, lResult.mLoopID, lResult.mPlate);
 					ofs.open(resultFileName, std::ios::binary);
@@ -1729,7 +1746,7 @@ clock_t endclock_VSD = clock();
 					LPRReleaseImage(lpImageSubtile);
 					delete pSubtitleImage;
 				}
-			
+			/*
 				EventMedia lMedia;
 				lEventApp.Convert2Media(lResult.mVideoImage, lResult.mNumOfVideoImage, lMedia);
 				swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_违反%d_车道%d.avi", lResult.mID, lResult.mBreakRule, lResult.mLoopID);
@@ -1738,7 +1755,7 @@ clock_t endclock_VSD = clock();
 				ofs.write((const char*)lMedia.mBufferPtr, lMedia.mBufferSize);
 				ofs.close();
 				FreeEventMedia(&lMedia);
-				
+				*/
 				
 			}
 		}
