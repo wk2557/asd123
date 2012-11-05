@@ -110,7 +110,7 @@ struct EventAPPResult
 	int mID;															// 物体的ID
 	int mNumOfVideoImage;												// 用于合成录像的图像的个数
 	int mNumOfSynthesisImage;											// 用于合成大图片的原始图片个数
-	//wchar_t mPlate[LPR_PLATE_STR_LEN];									// 物体的车牌号
+	//wchar_t mPlate[LPR_PLATE_STR_LEN];								// 物体的车牌号
 	int mBreakRule;														// ID物体违反的规则
 	int mLoopID;														// ID物体的车道
 	LPRImage* mVideoImage[MAX_FRAME_AHEAD + MAX_FRAME_BEHIND];			// 物体的图片序列，如果mBreakRule是VSD_BR_NONE，那么mNumberOfImage的值一定是1，保存其位于停车线附近的照片
@@ -136,5 +136,7 @@ EVENTAPP_API void __stdcall FreeAPPResult(EventAPPResult* ipAPPResult);
 EVENTAPP_API void __stdcall FreeEventMedia(EventMedia *pMedia);
 EVENTAPP_API void __stdcall InitEventMultiAPPResult(EventMultiAPPResult& irEventMultiAPPResult);
 EVENTAPP_API APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ipEventParam);
+EVENTAPP_API LPRImage* LPRCloneImageRef(LPRImage* pImage);
+EVENTAPP_API void LPRReleaseImageRef(LPRImage* pImage);
 
 #endif

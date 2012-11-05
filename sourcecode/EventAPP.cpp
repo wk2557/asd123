@@ -48,7 +48,6 @@ typedef std::map<int, VSDRatioRECT> RatioRectMap;
 struct PoolData
 {
 	StatusMap mBreakRules;
-	//RatioRectMap mRatioRectMap;
 	LPRImage* mpImage;
 };
 
@@ -68,7 +67,7 @@ struct RuleVideoImage
 	VideoImageVector mVideoImage;
 	LPRImage* mBreakRuleImage;
 };
-//typedef std::map<int, VideoImageVector> RuleVideoImageMap;
+
 typedef std::map<int, RuleVideoImage> ObjectVideoImageMap;
 
 #ifdef __cplusplus
@@ -385,7 +384,7 @@ void EventAPPImpl::GrabStopLineImage(const VSDRatioRECT& objectRatioRECT, const 
 		CaptureImageMap::iterator itVirtualImage = mTouchStopLineImage.find(lObject.uid);
 		if(itVirtualImage == mTouchStopLineImage.end())
 		{
-			LPRImage *pImage = LPRCloneImage(ipImage);
+			LPRImage *pImage = LPRCloneImageRef(ipImage);
 			mTouchStopLineImage.insert(std::make_pair(lObject.uid, pImage));
 			RectMap::iterator itRect = mRectMap.find(lObject.uid); 
 			if(itRect == mRectMap.end())
@@ -402,7 +401,7 @@ void EventAPPImpl::GrabStopLineImage(const VSDRatioRECT& objectRatioRECT, const 
 			CaptureImageMap::iterator itVirtualImage = mLeaveStopLineImage.find(lObject.uid);
 			if(itVirtualImage == mLeaveStopLineImage.end())
 			{
-				LPRImage *pImage = LPRCloneImage(ipImage);
+				LPRImage *pImage = LPRCloneImageRef(ipImage);
 				mLeaveStopLineImage.insert(std::make_pair(lObject.uid, pImage));
 			}
 
@@ -420,7 +419,7 @@ void EventAPPImpl::GrabCenterLineImage(const VSDRatioRECT& objectRatioRECT, cons
 		CaptureImageMap::iterator itVirtualImage = mTouchCentreLineImage.find(lObject.uid);
 		if(itVirtualImage == mTouchCentreLineImage.end())
 		{
-			LPRImage* pImage = LPRCloneImage(ipImage);
+			LPRImage* pImage = LPRCloneImageRef(ipImage);
 			mTouchCentreLineImage.insert(std::make_pair(lObject.uid, pImage));
 		}
 	}
@@ -433,7 +432,7 @@ void EventAPPImpl::GrabVirtualLineImage(const VSDRatioRECT& objectRatioRECT, con
 		CaptureImageMap::iterator itVirtualImage = mTouchVirtualLoopLineImage.find(lObject.uid);
 		if(itVirtualImage == mTouchVirtualLoopLineImage.end())
 		{
-			LPRImage* pImage = LPRCloneImage(ipImage);
+			LPRImage* pImage = LPRCloneImageRef(ipImage);
 			mTouchVirtualLoopLineImage.insert(std::make_pair(lObject.uid, pImage));
 		}
 	}
@@ -446,7 +445,7 @@ void EventAPPImpl::GrabLeftTurnLineImage(const VSDRatioRECT& objectRatioRECT, co
 	{
 		if (GetCrossRatio(mEventAPPParam.mLeftTurnLine, objectRatioRECT) > 0)
 		{
-			LPRImage* lpImage = LPRCloneImage(ipImage);
+			LPRImage* lpImage = LPRCloneImageRef(ipImage);
 			mTouchLeftTurnImage.insert(make_pair(lObject.uid, lpImage));
 		}
 	}
@@ -459,7 +458,7 @@ void EventAPPImpl::GrabRightTurnLineImage(const VSDRatioRECT& objectRatioRECT, c
 	{
 		if (GetCrossRatio(mEventAPPParam.mRightTurnLine, objectRatioRECT) > 0)
 		{
-			LPRImage* lpImage = LPRCloneImage(ipImage);
+			LPRImage* lpImage = LPRCloneImageRef(ipImage);
 			mTouchRightTurnImage.insert(make_pair(lObject.uid, lpImage));
 		}
 	}
@@ -482,10 +481,12 @@ void EventAPPImpl::ConstructResult(int uid, EventMultiAPPResult* opResultMulti)/
 		lAPPResult.mBreakRule = itObjectVideoImage->second.mRuleType;
 		for(int i = 0; i < lVideoImageSize; ++i)
 		{
-			LPRImage* lpImage = LPRCloneImage(itObjectVideoImage->second.mVideoImage[i]);
+			LPRImage* lpImage = LPRCloneImageRef(itObjectVideoImage->second.mVideoImage[i]);
 			lAPPResult.mVideoImage[i] = lpImage;
+			//lAPPResult.mVideoImage[i] = itObjectVideoImage->second.mVideoImage[i];//lpImage;
 		}
 		lAPPResult.mNumOfVideoImage = lVideoImageSize;
+
 	}
 
 	// 填充车道信息
@@ -514,8 +515,10 @@ void EventAPPImpl::ConstructResult(int uid, EventMultiAPPResult* opResultMulti)/
 	CaptureImageMap::iterator itVirtualLoopTouch = mTouchStopLineImage.find(uid);
 	if(itVirtualLoopTouch != mTouchStopLineImage.end())
 	{
-		LPRImage* lpImage = LPRCloneImage(itVirtualLoopTouch->second);
+		LPRImage* lpImage = LPRCloneImageRef(itVirtualLoopTouch->second);
 		lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+		//lAPPResult.mSynthesisImage[lSynthesisNum++] = itVirtualLoopTouch->second;//lpImage;
+		//mTouchStopLineImage.erase(itVirtualLoopTouch);
 	}
 	// 如果有违章
 	if (lAPPResult.mBreakRule != VSD_BR_NONE)
@@ -523,16 +526,20 @@ void EventAPPImpl::ConstructResult(int uid, EventMultiAPPResult* opResultMulti)/
 		CaptureImageMap::iterator itVirtualLoopLeave = mLeaveStopLineImage.find(uid);
 		if(itVirtualLoopLeave != mLeaveStopLineImage.end())
 		{
-			LPRImage* lpImage = LPRCloneImage(itVirtualLoopLeave->second);
+			LPRImage* lpImage = LPRCloneImageRef(itVirtualLoopLeave->second);
 			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+			//lAPPResult.mSynthesisImage[lSynthesisNum++] = itVirtualLoopLeave->second;
+			//mLeaveStopLineImage.erase(itVirtualLoopLeave);
 		}
 		if(lAPPResult.mBreakRule == VSD_BR_RED_LIGHT)
 		{
 			CaptureImageMap::iterator itCentreImage = mTouchCentreLineImage.find(uid);
 			if(itCentreImage != mTouchCentreLineImage.end())
 			{
-				LPRImage* lpImage = LPRCloneImage(itCentreImage->second);
+				LPRImage* lpImage = LPRCloneImageRef(itCentreImage->second);
 				lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+				//lAPPResult.mSynthesisImage[lSynthesisNum++] = itCentreImage->second;//lpImage;
+				//mTouchCentreLineImage.erase(itCentreImage);
 			}
 			else
 			{
@@ -542,8 +549,10 @@ void EventAPPImpl::ConstructResult(int uid, EventMultiAPPResult* opResultMulti)/
 					CaptureImageMap::iterator itLeftTurnImage = mTouchLeftTurnImage.find(uid);
 					if (itLeftTurnImage != mTouchLeftTurnImage.end())
 					{
-						LPRImage* lpImage = LPRCloneImage(itLeftTurnImage->second);
+						LPRImage* lpImage = LPRCloneImageRef(itLeftTurnImage->second);
 						lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+						//lAPPResult.mSynthesisImage[lSynthesisNum++] = itLeftTurnImage->second;//lpImage;
+						//mTouchLeftTurnImage.erase(itLeftTurnImage);
 					}
 				}
 				else if (lLoopLaneProperty == VSD_LANE_TURN_RIGHT)
@@ -551,16 +560,25 @@ void EventAPPImpl::ConstructResult(int uid, EventMultiAPPResult* opResultMulti)/
 					CaptureImageMap::iterator itRightTurnImage = mTouchRightTurnImage.find(uid);
 					if (itRightTurnImage != mTouchRightTurnImage.end())
 					{
-						LPRImage* lpImage = LPRCloneImage(itRightTurnImage->second);
+						LPRImage* lpImage = LPRCloneImageRef(itRightTurnImage->second);
 						lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+						//lAPPResult.mSynthesisImage[lSynthesisNum++] = itRightTurnImage->second;//lpImage;
+						//mTouchRightTurnImage.erase(itRightTurnImage);
 					}
 				}
-			}		
+			}
+			/*
+			if (itObjectVideoImage != mVideoImage.end())
+			{
+				LPRReleaseImage(itObjectVideoImage->second.mBreakRuleImage);
+			}	
+			*/
 		}
 		else 
 		{
-			LPRImage* lpImage = LPRCloneImage(itObjectVideoImage->second.mBreakRuleImage);//mImagePool.at(iStartIndex).mpImage);
+			LPRImage* lpImage = LPRCloneImageRef(itObjectVideoImage->second.mBreakRuleImage);
 			lAPPResult.mSynthesisImage[lSynthesisNum++] = lpImage;
+			//lAPPResult.mSynthesisImage[lSynthesisNum++] = itObjectVideoImage->second.mBreakRuleImage;//;lpImage;
 		}
 	}
 	lAPPResult.mNumOfSynthesisImage = lSynthesisNum;
@@ -568,14 +586,22 @@ void EventAPPImpl::ConstructResult(int uid, EventMultiAPPResult* opResultMulti)/
 	CaptureImageMap::iterator itPlateImage = mTouchVirtualLoopLineImage.find(uid);
 	if(itPlateImage != mTouchVirtualLoopLineImage.end())
 	{
-		LPRImage* lpImage = LPRCloneImage(itPlateImage->second);
+		LPRImage* lpImage = LPRCloneImageRef(itPlateImage->second);
 		lAPPResult.mPlateImage = lpImage;
+		//lAPPResult.mPlateImage = itPlateImage->second;//lpImage;
+		//mTouchVirtualLoopLineImage.erase(itPlateImage);
 	}
 	else
 		lAPPResult.mPlateImage = NULL;
 	// 构造好EventAPPResult后把他插入到opResultMulti中
 	opResultMulti->mppAPPResult[opResultMulti->mNumOfResult++] = lAPPResult;
 	//opResultMulti->mNumOfResult = orResultCount;
+	/*
+	if (itObjectVideoImage != mVideoImage.end())
+	{
+		mVideoImage.erase(itObjectVideoImage);
+	}
+	*/
 	return;
 }
 
@@ -663,39 +689,39 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 				CaptureImageMap::iterator itVirtualLoopImage = mTouchStopLineImage.find(itObject->first);
 				if (itVirtualLoopImage != mTouchStopLineImage.end())
 				{
-					LPRReleaseImage(itVirtualLoopImage->second);
+					LPRReleaseImageRef(itVirtualLoopImage->second);
 					mTouchStopLineImage.erase(itVirtualLoopImage);
 				}
 
 				itVirtualLoopImage = mLeaveStopLineImage.find(itObject->first);
 				if(itVirtualLoopImage != mLeaveStopLineImage.end())
 				{
-					LPRReleaseImage(itVirtualLoopImage->second);
+					LPRReleaseImageRef(itVirtualLoopImage->second);
 					mLeaveStopLineImage.erase(itVirtualLoopImage);
 				}
 
 				itVirtualLoopImage = mTouchCentreLineImage.find(itObject->first);
 				if(itVirtualLoopImage != mTouchCentreLineImage.end())
 				{
-					LPRReleaseImage(itVirtualLoopImage->second);
+					LPRReleaseImageRef(itVirtualLoopImage->second);
 					mTouchCentreLineImage.erase(itVirtualLoopImage);
 				}
 				itVirtualLoopImage = mTouchVirtualLoopLineImage.find(itObject->first);
 				if (itVirtualLoopImage != mTouchVirtualLoopLineImage.end())
 				{
-					LPRReleaseImage(itVirtualLoopImage->second);
+					LPRReleaseImageRef(itVirtualLoopImage->second);
 					mTouchVirtualLoopLineImage.erase(itVirtualLoopImage);
 				}
 				itVirtualLoopImage = mTouchLeftTurnImage.find(itObject->first);
 				if (itVirtualLoopImage != mTouchLeftTurnImage.end())
 				{
-					LPRReleaseImage(itVirtualLoopImage->second);
+					LPRReleaseImageRef(itVirtualLoopImage->second);
 					mTouchLeftTurnImage.erase(itVirtualLoopImage);
 				}
 				itVirtualLoopImage = mTouchRightTurnImage.find(itObject->first);
 				if (itVirtualLoopImage != mTouchRightTurnImage.end())
 				{
-					LPRReleaseImage(itVirtualLoopImage->second);
+					LPRReleaseImageRef(itVirtualLoopImage->second);
 					mTouchRightTurnImage.erase(itVirtualLoopImage);
 				}
 				ObjectVideoImageMap::iterator itObjectVideoMap = mVideoImage.find(itObject->first);
@@ -706,16 +732,16 @@ void EventAPPImpl::TranversePool(EventMultiAPPResult* opResult)
 						int lVideoSize = itObjectVideoMap->second.mVideoImage.size();
 						for (int i = 0; i < lVideoSize; ++i)
 						{
-							LPRReleaseImage(itObjectVideoMap->second.mVideoImage[i]);
+							LPRReleaseImageRef(itObjectVideoMap->second.mVideoImage[i]);
 						}
-						LPRReleaseImage(itObjectVideoMap->second.mBreakRuleImage);
+						LPRReleaseImageRef(itObjectVideoMap->second.mBreakRuleImage);
 					}
 					mVideoImage.erase(itObjectVideoMap);
 				}
 			}
 		}
 		// 释放掉队列头已不再需要录像的缓存的图片
-		LPRReleaseImage(mImagePool.front().mpImage);
+		LPRReleaseImageRef(mImagePool.front().mpImage);
 		mImagePool.pop_front();
 	}
 }
@@ -1164,15 +1190,17 @@ void EventAPPImpl::ConstructVideo(int iRuleType, int uid, int iStartIndex)//, Ev
 		{
 			if (itObjectVideoImage->second.mRuleType == iRuleType)
 			{
+#ifdef __DEBUG
 				assert(false);
+#endif			
 			}
 			else
 			{
 				for(int i = 0; i < itObjectVideoImage->second.mVideoImage.size(); ++i)
 				{
-					LPRReleaseImage(itObjectVideoImage->second.mVideoImage[i]);
+					LPRReleaseImageRef(itObjectVideoImage->second.mVideoImage[i]);
 				}
-				LPRReleaseImage(itObjectVideoImage->second.mBreakRuleImage);
+				LPRReleaseImageRef(itObjectVideoImage->second.mBreakRuleImage);
 			}
 		}
 		RuleVideoImage lRuleVideoImage;
@@ -1184,10 +1212,10 @@ void EventAPPImpl::ConstructVideo(int iRuleType, int uid, int iStartIndex)//, Ev
 		LPRImage* lpImage = NULL;
 		for (int i = 0; i < lSizeToCopy; ++i )
 		{
-			lpImage = LPRCloneImage(mImagePool.at(i + lBeginIndex).mpImage);
+			lpImage = LPRCloneImageRef(mImagePool.at(i + lBeginIndex).mpImage);
 			lRuleVideoImage.mVideoImage.push_back(lpImage);
 		}
-		lpImage = LPRCloneImage(mImagePool.at(iStartIndex).mpImage);
+		lpImage = LPRCloneImageRef(mImagePool.at(iStartIndex).mpImage);
 		lRuleVideoImage.mBreakRuleImage = lpImage;
 		mVideoImage[uid] = lRuleVideoImage;
 	}
@@ -1198,40 +1226,40 @@ EventAPPImpl::~EventAPPImpl()
 {
 	while(!mImagePool.empty())
 	{
-		LPRReleaseImage(mImagePool.front().mpImage);
+		LPRReleaseImageRef(mImagePool.front().mpImage);
 		mImagePool.pop_front();
 	}
 
 	for(CaptureImageMap::iterator it = mTouchStopLineImage.begin(); it != mTouchStopLineImage.end(); ++it)
-		LPRReleaseImage(it->second);
+		LPRReleaseImageRef(it->second);
 
 	mLPR.Fini();
 
 	for(CaptureImageMap::iterator it = mLeaveStopLineImage.begin(); it != mLeaveStopLineImage.end(); ++it)
-		LPRReleaseImage(it->second);
+		LPRReleaseImageRef(it->second);
 
 	for(CaptureImageMap::iterator it = mTouchCentreLineImage.begin(); it != mTouchCentreLineImage.end(); ++it)
-		LPRReleaseImage(it->second);
+		LPRReleaseImageRef(it->second);
 
 	for(CaptureImageMap::iterator it = mTouchVirtualLoopLineImage.begin(); it != mTouchVirtualLoopLineImage.end(); ++it)
-		LPRReleaseImage(it->second);
+		LPRReleaseImageRef(it->second);
 
 	for(CaptureImageMap::iterator it = mTouchLeftTurnImage.begin(); it != mTouchLeftTurnImage.end(); ++it)
-		LPRReleaseImage(it->second);
+		LPRReleaseImageRef(it->second);
 	
 	for(CaptureImageMap::iterator it = mTouchRightTurnImage.begin(); it != mTouchRightTurnImage.end(); ++it)
-		LPRReleaseImage(it->second);
+		LPRReleaseImageRef(it->second);
 
 	for(ObjectVideoImageMap::iterator it = mVideoImage.begin(); it != mVideoImage.end(); ++it)
 	{
 		int lSize = it->second.mVideoImage.size();
 		for(int i = 0; i < lSize; ++i)
 		{
-			LPRReleaseImage(it->second.mVideoImage[i]);
+			LPRReleaseImageRef(it->second.mVideoImage[i]);
 		}
 		if (it->second.mRuleType != VSD_BR_NONE)
 		{
-			LPRReleaseImage(it->second.mBreakRuleImage);
+			LPRReleaseImageRef(it->second.mBreakRuleImage);
 		}
 	}
 
@@ -1297,12 +1325,12 @@ APPRESULT EventAPPImpl::Convert2Media(LPRImage** ipImage, int iNumOfImages, Even
 	}
 
 	for(int i = 0; i < ipAPPResult->mNumOfVideoImage; ++i)
-		LPRReleaseImage(ipAPPResult->mVideoImage[i]);
+		LPRReleaseImageRef(ipAPPResult->mVideoImage[i]);
 
 	for(int i = 0; i < ipAPPResult->mNumOfSynthesisImage; ++i)
-		LPRReleaseImage(ipAPPResult->mSynthesisImage[i]);
+		LPRReleaseImageRef(ipAPPResult->mSynthesisImage[i]);
 	if (ipAPPResult->mPlateImage != NULL)
-		LPRReleaseImage(ipAPPResult->mPlateImage);
+		LPRReleaseImageRef(ipAPPResult->mPlateImage);
 }
 
 void __stdcall FreeEventMedia(EventMedia *pMedia)
@@ -1547,14 +1575,6 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 		return lAPPResult;
 
 	// 初始化各种rule的录制帧范围
-	/*
-	lAPPResult = CheckAndSetValue(keyValue, "RecordBreakNoneFramAhead", 0, MAX_FRAME_AHEAD, ipEventParam->mRecordParam.mBreakRuleAhead[0]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-	lAPPResult = CheckAndSetValue(keyValue, "RecordBreakNoneFramBehind", 0, MAX_FRAME_BEHIND, ipEventParam->mRecordParam.mBreakRuleBehind[0]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-		*/
 	ipEventParam->mRecordParam.mBreakRuleAhead[0] = 0;
 	ipEventParam->mRecordParam.mBreakRuleBehind[0] = 0;
 
@@ -1687,12 +1707,6 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	if (lAPPResult != APP_OK)
 		return lAPPResult;
 
-	/*
-	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakNonePriority", 0, 9, ipEventParam->mRulePriority[0]);
-	if (lAPPResult != APP_OK)
-		return lAPPResult;
-		*/
-
 	ipEventParam->mRulePriority[0] = 0;
 	lAPPResult = CheckAndSetValue(keyValue, "RuleBreakTurnLeftPriority", 0, 9, ipEventParam->mRulePriority[1]);
 	if (lAPPResult != APP_OK)
@@ -1725,6 +1739,38 @@ APPRESULT __stdcall EventAPP_LoadParam(const char* ipFileName, EventAPPParam* ip
 	return APP_OK;
 }
 
+LPRImage* LPRCloneImageRef(LPRImage* pImage)
+{
+	if (!pImage)
+	{
+		return NULL;
+	}
+	int nSize = sizeof(pImage->info.pReserved);
+	int nCounter = pImage->info.pReserved[nSize-1];
+	pImage->info.pReserved[nSize-1] += 1;   /// 用保留字段的最后一位来做reference counter
+
+	return pImage;
+}
+
+void LPRReleaseImageRef(LPRImage* pImage)
+{
+	if(!pImage)
+	{
+		return;
+	}
+
+	int nSize = sizeof(pImage->info.pReserved);
+	int nCounter = pImage->info.pReserved[nSize-1];
+	if (nCounter == 0)                      /// 当reference counter减到0，则释放内存
+	{
+		LPRReleaseImage(pImage);
+	}
+	else
+	{
+		pImage->info.pReserved[nSize-1] = nCounter-1;
+	}
+}
+/*
 
 static bool CmpFileName(const string& a, const string& b)
 {
@@ -1884,7 +1930,7 @@ clock_t endclock_VSD = clock();
 					LPRReleaseImage(lpImageSubtile);
 					delete pSubtitleImage;
 				}
-			/*
+			
 				EventMedia lMedia;
 				lEventApp.Convert2Media(lResult.mVideoImage, lResult.mNumOfVideoImage, lMedia);
 				swprintf(resultFileName,256, L"F:\\resultdata\\ID%d_违反%d_车道%d.avi", lResult.mID, lResult.mBreakRule, lResult.mLoopID);
@@ -1893,7 +1939,7 @@ clock_t endclock_VSD = clock();
 				ofs.write((const char*)lMedia.mBufferPtr, lMedia.mBufferSize);
 				ofs.close();
 				FreeEventMedia(&lMedia);
-				*/
+				
 				
 			}
 		}
@@ -1909,3 +1955,4 @@ clock_t endclock_VSD = clock();
 	std::cin >> i;
 	return 0;
 }
+*/
